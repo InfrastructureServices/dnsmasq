@@ -671,7 +671,7 @@ static size_t process_reply(struct dns_header *header, time_t now, struct server
   if (!(header->hb4 & HB4_RA) && rcode == NOERROR &&
       server && !(server->flags & SERV_WARNED_RECURSIVE))
     {
-      prettyprint_addr(&server->addr, daemon->namebuff);
+      (void)prettyprint_addr(&server->addr, daemon->namebuff);
       my_syslog(LOG_WARNING, _("nameserver %s refused to do a recursive query"), daemon->namebuff);
       if (!option_bool(OPT_LOG))
 	server->flags |= SERV_WARNED_RECURSIVE;
@@ -951,7 +951,7 @@ void reply_query(int fd, int family, time_t now)
     {
       server->edns_pktsz = SAFE_PKTSZ;
       server->pktsz_reduced = now;
-      prettyprint_addr(&server->addr, daemon->addrbuff);
+      (void)prettyprint_addr(&server->addr, daemon->addrbuff);
       my_syslog(LOG_WARNING, _("reducing DNS packet size for nameserver %s to %d"), daemon->addrbuff, SAFE_PKTSZ);
     }
 

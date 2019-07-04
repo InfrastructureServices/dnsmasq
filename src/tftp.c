@@ -281,7 +281,7 @@ void tftp_request(struct listener *listen, time_t now)
   transfer->opt_blocksize = transfer->opt_transize = 0;
   transfer->netascii = transfer->carrylf = 0;
  
-  prettyprint_addr(&peer, daemon->addrbuff);
+  (void)prettyprint_addr(&peer, daemon->addrbuff);
   
   /* if we have a nailed-down range, iterate until we find a free one. */
   while (1)
@@ -547,7 +547,7 @@ void check_tftp_listeners(time_t now)
     {
       tmp = transfer->next;
       
-      prettyprint_addr(&transfer->peer, daemon->addrbuff);
+      (void)prettyprint_addr(&transfer->peer, daemon->addrbuff);
      
       if (poll_check(transfer->sockfd, POLLIN))
 	{
