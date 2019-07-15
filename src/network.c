@@ -584,7 +584,13 @@ static int release_listener(struct listener *l)
 
       /* Someone is still using this listener, skip its deletion */
       if (l->used > 0)
-	return 0;
+	{
+	  int port;
+	  port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
+	  my_syslog(LOG_DEBUG, _("still listening on %s(#%d): %s:%d, usage %d"),
+		    l->iface->name, l->iface->index, daemon->addrbuff, port, l->used);
+	  return 0;
+	}
     }
 
   if (l->iface->done)
@@ -761,6 +767,17 @@ static int make_sock(union mysockaddr *addr, int type, int dienow)
       
     err:
       errsave = errno;
+      if (errno == EADDRINUSE)
+	{
+	  struct listener *l;
+	  int i;
+	  for (l=daemon->listeners, i=0; l; l = l->next, i++)
+	    {
+	      port = prettyprint_addr(&l->addr, daemon->addrbuff);
+	      my_syslog(LOG_DEBUG, _("Listener[%d]: %p [%s:%d] iface %p usage %d"),
+				   i, l, daemon->addrbuff, port, l->iface, l->used);
+	    }
+	}
       port = prettyprint_addr(addr, daemon->addrbuff);
       if (!option_bool(OPT_NOWILD) && !option_bool(OPT_CLEVERBIND))
 	sprintf(daemon->addrbuff, "port %d", port);
@@ -1024,11 +1041,17 @@ void create_bound_listeners(int dienow)
   for (iface = daemon->interfaces; iface; iface = iface->next)
     if (!iface->done && !iface->dad && iface->found)
       {
+	int port;
 	existing = find_listener(&iface->addr);
+	port = prettyprint_addr(&iface->addr, daemon->addrbuff);
+	my_syslog(LOG_DEBUG, _("should listen on %s(#%d): %s:%d %p"),
+		  iface->name, iface->index, daemon->addrbuff, port, existing);
 	if (existing)
 	  {
 	    iface->done = 1;
 	    existing->used++; /* increase usage counter */
+	    (void)prettyprint_addr(&existing->addr, daemon->addrbuff);
+	    my_syslog(LOG_DEBUG, _("already listening on %s"), daemon->addrbuff);
 	  }
 	else if ((new = create_listeners(&iface->addr, iface->tftp_ok, dienow)))
 	  {
