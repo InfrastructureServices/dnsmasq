@@ -1999,7 +1999,8 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
       
     case LOPT_AUTHSERV: /* --auth-server */
       comma = split(arg);
-      
+      if (daemon->authserver)
+	free(daemon->authserver);
       daemon->authserver = opt_string_alloc(arg);
       
       while ((arg = comma))
@@ -2064,6 +2065,13 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	new->interface_names = NULL;
 	new->next = daemon->auth_zones;
 	daemon->auth_zones = new;
+
+      	if (!daemon->authserver)
+	  {
+	    if (gethostname(daemon->namebuff, MAXDNAME) == -1)
+	      die(_("cannot get host-name: %s"), NULL, EC_MISC);
+	    daemon->authserver = opt_string_alloc(daemon->namebuff);
+	  }
 
 	while ((arg = comma))
 	  {
@@ -5214,7 +5222,7 @@ void read_opts(int argc, char **argv, char *compile_opts)
 
   /* If there's access-control config, then ignore --local-service, it's intended
      as a system default to keep otherwise unconfigured installations safe. */
-  if (daemon->if_names || daemon->if_except || daemon->if_addrs || daemon->authserver)
+  if (daemon->if_names || daemon->if_except || daemon->if_addrs || daemon->authinterface)
     reset_option_bool(OPT_LOCAL_SERVICE); 
 
   if (testmode)
