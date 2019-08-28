@@ -680,7 +680,8 @@ static int construct_worker(struct in6_addr *local, int prefix,
 	    is_same_net6(local, &template->end6, template->prefix))
 	  {
 	    /* First time found, do fast RA. */
-	    if (template->if_index != if_index || !IN6_ARE_ADDR_EQUAL(&template->local6, local))
+	    if (template->if_index != if_index
+	        || !is_same_net6(&template->local6, local, template->prefix))
 	      {
 		ra_start_unsolicited(param->now, template);
 		param->newone = 1;
