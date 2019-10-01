@@ -1820,7 +1820,15 @@ static void check_dns_listeners(time_t now)
 		      break;
 		  
 		  if (!iface && !loopback_exception(listener->tcpfd, tcp_addr.sa.sa_family, &addr, intr_name))
-		    client_ok = 0;
+		    {
+		      client_ok = 0;
+		      if (option_bool(OPT_EXTRALOG))
+			{
+			  int port = prettyprint_addr(&tcp_addr, daemon->addrbuff);
+			  my_syslog(LOG_DEBUG, _("denied tcp request from %s port %d iface %s(#%u)"),
+				    daemon->addrbuff, port, intr_name, if_index);
+			}
+		    }
 		}
 	      
 	      if (option_bool(OPT_CLEVERBIND))
