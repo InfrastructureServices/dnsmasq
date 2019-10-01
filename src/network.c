@@ -717,7 +717,14 @@ int enumerate_interfaces(int reset)
 	  else if (release_listener(l))
 	    {
 	      *up = tmp;
-		freed = 1;
+	      freed = 1;
+	      if (l->iface->done)
+	        {
+	          iface = l->iface;
+	          (void)prettyprint_addr(&iface->addr, daemon->addrbuff);
+	          my_syslog(LOG_DEBUG, _("stopped listening on %s(#%d): %s"),
+	                    iface->name, iface->index, daemon->addrbuff);
+	        }
 	    }
 	}
 
