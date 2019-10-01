@@ -585,21 +585,28 @@ static int release_listener(struct listener *l)
       /* Someone is still using this listener, skip its deletion */
       if (l->used > 0)
 	{
-	  int port;
-	  port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
-	  my_syslog(LOG_DEBUG, _("still listening on %s(#%d): %s:%d, usage %d"),
-		    l->iface->name, l->iface->index, daemon->addrbuff, port, l->used);
+	  if (option_bool(OPT_EXTRALOG))
+	    {
+	      int port;
+	      port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
+	      my_syslog(LOG_DEBUG, _("still listening on %s(#%d): %s:%d, usage %d"),
+			l->iface->name, l->iface->index, daemon->addrbuff, port, l->used);
+	    }
 	  return 0;
 	}
     }
 
   if (l->iface->done)
     {
-      int port;
+      if (option_bool(OPT_EXTRALOG))
+	{
+	  int port;
 
-      port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
-      my_syslog(LOG_DEBUG, _("stopped listening on %s(#%d): %s port %d"),
-		l->iface->name, l->iface->index, daemon->addrbuff, port);
+	  port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
+	  my_syslog(LOG_DEBUG, _("stopped listening on %s(#%d): %s port %d"),
+		    l->iface->name, l->iface->index, daemon->addrbuff, port);
+	}
+
       /* In case it ever returns */
       l->iface->done = 0;
     }
@@ -767,7 +774,7 @@ static int make_sock(union mysockaddr *addr, int type, int dienow)
       
     err:
       errsave = errno;
-      if (errno == EADDRINUSE)
+      if (errno == EADDRINUSE && option_bool(OPT_EXTRALOG))
 	{
 	  struct listener *l;
 	  int i;
