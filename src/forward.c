@@ -801,8 +801,11 @@ void reply_query(int fd, int family, time_t now)
 #ifdef HAVE_DNSSEC
   hash = hash_questions(header, n, daemon->namebuff);
 #else
-  hash = &crc;
   crc = questions_crc(header, n, daemon->namebuff);
+  if (crc == 0xffffffff)
+    hash = NULL;
+  else
+    hash = &crc;
 #endif
   
   if (!(forward = lookup_frec(ntohs(header->id), hash)))

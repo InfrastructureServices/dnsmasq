@@ -2056,6 +2056,9 @@ size_t dnssec_generate_query(struct dns_header *header, unsigned char *end, char
   return ret;
 }
 
+/* Returns NULL when no queries were found.
+ *
+ * May happen in negative responses. */
 unsigned char* hash_questions(struct dns_header *header, size_t plen, char *name)
 {
   int q;
@@ -2063,15 +2066,16 @@ unsigned char* hash_questions(struct dns_header *header, size_t plen, char *name
   unsigned char *p = (unsigned char *)(header+1);
   const struct nettle_hash *hash;
   void *ctx;
-  unsigned char *digest;
+  unsigned char *digest = NULL;
   
-  if (!(hash = hash_find("sha1")) || !hash_init(hash, &ctx, &digest))
+  if (!(hash = hash_find("sha1")))
     return NULL;
   
   for (q = ntohs(header->qdcount); q != 0; q--) 
     {
-      if (!extract_name(header, plen, &p, name, 1, 4))
-	break; /* bad packet */
+      if ((!digest && !hash_init(hash, &ctx, &digest)) ||
+	  !extract_name(header, plen, &p, name, 1, 4))
+	return NULL; /* bad packet */
       
       len = to_wire(name);
       hash->update(ctx, len, (unsigned char *)name);
@@ -2080,10 +2084,10 @@ unsigned char* hash_questions(struct dns_header *header, size_t plen, char *name
 
       p += 4;
       if (!CHECK_LEN(header, p, plen, 0))
-	break; /* bad packet */
+	return NULL; /* bad packet */
     }
-  
-  hash->digest(ctx, hash->digest_size, digest);
+  if (digest)
+    hash->digest(ctx, hash->digest_size, digest);
   return digest;
 }
 
