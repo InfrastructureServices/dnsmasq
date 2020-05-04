@@ -1,13 +1,25 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <setjmp.h>
-#include <cmocka.h>
+// vim: sts=2
+#include "test.h"
 
-void read_opts(int argc, char **argv, char *compile_opts);
+/* Because dnsmasq uses die() function to report failures,
+ * unsupported options cannot be tested now. */
 
 static void test_option(void **state)
 {
+  char *argv[] = {
+	  "--test",
+	  "--user=dnsmasq",
+	  "--group=dnsmasq",
+	  "--domain=test",
+	  "--log-queries",
+  };
   (void) state;
+
+  testcore_main(ARRAY_SIZE(argv), argv);
+  assert_string_equal(daemon->username, "dnsmasq");
+  assert_string_equal(daemon->groupname, "dnsmasq");
+  assert_true(option_bool(OPT_LOG));
+  assert_false(option_bool(OPT_EXTRALOG));
 }
 
 int main(int argc, char *argv[])
