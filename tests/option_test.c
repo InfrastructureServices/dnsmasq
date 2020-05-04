@@ -7,7 +7,7 @@
 static void test_option(void **state)
 {
   char *argv[] = {
-	  "--test",
+	  ARGV_START,
 	  "--user=dnsmasq",
 	  "--group=dnsmasq",
 	  "--domain=test",
