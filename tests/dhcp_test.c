@@ -245,12 +245,70 @@ static void test_dhcp_ipv6(void **state)
   assert_false(config->hwaddr);
 }
 
+static void test_dhcp_mixed(void **state)
+{
+  char *argv[] = {
+	  ARGV_START,
+	  "--dhcp-range=192.168.1.5,192.168.1.10,10",
+	  "--dhcp-host=11:22:33:44:55:66,192.168.1.12,mac-host4",
+	  "--dhcp-host=192.168.1.13,only-host",
+	  "--dhcp-range=fd27:807d:181c:fb81::d000,fd27:807d:181c:fb81::dfff,64,10",
+	  "--dhcp-host=11:22:33:44:55:66,[fd27:807d:181c:fb81::d12],mac-host6",
+	  "--dhcp-host=[fd27:807d:181c:fb81::d13],only-host",
+  };
+  unsigned char *clid = NULL;
+  int clid_len = 0;
+  struct dhcp_config *config = NULL;
+  struct hwaddr_config defined_client = {
+	6, 1, { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x0 }, 0, NULL,
+  };
+  struct hwaddr_config undefined_client = {
+	6, 1, { 0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x0 }, 0, NULL,
+  };
+
+  testcore_main(ARRAY_SIZE(argv), argv);
+
+  assert_true(daemon->dhcp);
+  assert_true(daemon->dhcp6);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       defined_client.hwaddr, defined_client.hwaddr_len,
+		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+  assert_true(config);
+  assert_string_equal(config->hostname, "mac-host4");
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
+		       defined_client.hwaddr, defined_client.hwaddr_len,
+		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+  assert_true(config);
+  assert_string_equal(config->hostname, "mac-host6");
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+  assert_false(config);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+  assert_false(config);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR);
+  assert_true(config);
+  assert_string_equal(config->hostname, "only-host");
+  assert_false(config->hwaddr);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR6);
+  assert_true(config);
+  assert_string_equal(config->hostname, "only-host");
+  assert_false(config->hwaddr);
+}
+
 
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
     cmocka_unit_test(test_dhcp_ipv4),
     cmocka_unit_test(test_dhcp_ipv6),
+    cmocka_unit_test(test_dhcp_mixed),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
