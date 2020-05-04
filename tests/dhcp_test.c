@@ -1,8 +1,25 @@
 // vim: sts=2
-#include "test.h"
+/*
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; version 2 dated June, 1991, or
+   (at your option) version 3 dated 29 June, 2007.
 
-/* Because dnsmasq uses die() function to report failures,
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* DHCP protocol definitions and configuration lookup tests.
+ *
+ * Because dnsmasq uses die() function to report failures,
  * unsupported options cannot be tested now. */
+
+#include "test.h"
 
 #if 0
 /* dhcp-range, stored in daemon->dhcp */
