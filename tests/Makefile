@@ -1,7 +1,9 @@
 
 all: options_test
 
-CFLAGS=-O2 -Wall -ggdb
+# Do not optimize too much. dnsmasq object files are optimized already
+# but tests need easier debugging by default
+CFLAGS=-O0 -Wall -ggdb
 SRC=../src
 CPPFLAGS=-I$(SRC)
 LIBS=-lcmocka

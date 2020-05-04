@@ -1,5 +1,6 @@
 // vim: sts=2
 #include "test.h"
+#include <unistd.h>
 
 struct daemon *daemon = NULL;
 
@@ -8,6 +9,9 @@ void testcore_main(int argc, char **argv)
 {
   rand_init();
 
+  if (daemon)
+    free(daemon);
+  optind=1;
   read_opts(argc, argv, "unittest");
 
 #ifdef HAVE_LINUX_NETWORK
