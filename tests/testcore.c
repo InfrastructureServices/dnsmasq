@@ -1,19 +1,7 @@
 // vim: sts=2
-#include "dnsmasq.h"
 #include "test.h"
 
 struct daemon *daemon = NULL;
-
-static int testcore_argc(char **argv)
-{
-  int argc = 0;
-  char **v;
-  assert(argv);
-
-  for (v = argv; *v; v++)
-    argc++;
-  return argc;
-}
 
 /* basic initialization taken from dnsmasq.c */
 void testcore_main(int argc, char **argv)
