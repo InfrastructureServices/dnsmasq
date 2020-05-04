@@ -39,6 +39,9 @@ option_test: option_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
 
+test: $(TESTS)
+	CMOCKA_MESSAGE_OUTPUT=TAP kyua test
+
 clean:
 	rm -f $(TESTCORE) $(TEST_OBJS) $(TESTS)
 

@@ -1,0 +1,6 @@
+# export CMOCKA_MESSAGE_OUTPUT=TAP
+syntax(2)
+test_suite('dnsmasq')
+
+tap_test_program{name='option_test'}
+tap_test_program{name='dhcp_test'}
