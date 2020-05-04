@@ -13,7 +13,10 @@ DNSMASQ_DHCP_OBJS=$(SRC)/cache.o $(SRC)/network.o $(SRC)/netlink.o $(SRC)/dhcp-c
 		  $(SRC)/domain.o $(SRC)/radv.o $(SRC)/outpacket.o $(SRC)/arp.o $(SRC)/blockdata.o \
 		  $(SRC)/edns0.o $(SRC)/dump.o
 TESTCORE=testcore.o testlib.o
-TEST_OBJS=option_test.o
+TESTCORE_SRCS=test.h testcore.c testlib.c
+
+TEST_OBJS=option_test.o dhcp_test.o
+TEST_SRCS=option_test.c dhcp_test.c
 
 all: options_test dhcp_test
 
@@ -25,6 +28,11 @@ dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSMASQ_DHCP_OBJS)
 
 clean:
 	rm -f $(TESTCORE) $(TEST_OBJS)
+
+cscope.out: $(TESTCORE_SRCS) $(TEST_SRCS)
+	cscope -R -b -s $(SRC)
+
+tags: cscope.out
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
