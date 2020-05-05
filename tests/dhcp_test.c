@@ -254,8 +254,9 @@ static void test_dhcp_ipv4(void **state)
   char *argv[] = {
 	  ARGV_START,
 	  "--dhcp-range=192.168.1.5,192.168.1.10,10",
-	  "--dhcp-host=11:22:33:44:55:66,192.168.1.12,mac-host",
 	  "--dhcp-host=192.168.1.13,only-host",
+	  "--dhcp-host=11:22:33:44:55:66,192.168.1.12,mac-host",
+	  "--dhcp-host=tag:eth0,11:22:33:44:55:66,192.168.1.14,tag-host",
   };
 
   unsigned char *clid = NULL;
@@ -268,6 +269,7 @@ static void test_dhcp_ipv4(void **state)
   struct hwaddr_config undefined_client = {
 	6, 1, { 0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x0 }, 0, NULL,
   };
+  struct dhcp_netid eth0 = { "eth0", NULL };
 
   (void) state;
 
@@ -276,6 +278,11 @@ static void test_dhcp_ipv4(void **state)
   context = daemon->dhcp;
 
   assert_true(context);
+  config = find_config(daemon->dhcp_conf, context, clid, clid_len,
+		       defined_client.hwaddr, defined_client.hwaddr_len,
+		       defined_client.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+  assert_true(config);
+  assert_string_equal(config->hostname, "tag-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
 		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
@@ -299,6 +306,7 @@ static void test_dhcp_ipv6(void **state)
 	  ARGV_START,
 	  "--dhcp-range=fd27:807d:181c:fb81::d000,fd27:807d:181c:fb81::dfff,64,10",
 	  "--dhcp-host=11:22:33:44:55:66,[fd27:807d:181c:fb81::d12],mac-host",
+	  "--dhcp-host=tag:eth0,11:22:33:44:55:66,[fd27:807d:181c:fb81::d12],tag-host",
 	  "--dhcp-host=[fd27:807d:181c:fb81::d13],only-host",
   };
 
@@ -312,12 +320,18 @@ static void test_dhcp_ipv6(void **state)
   struct hwaddr_config undefined_client = {
 	6, 1, { 0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x0 }, 0, NULL,
   };
+  struct dhcp_netid eth0 = { "eth0", NULL };
 
   testcore_main(ARRAY_SIZE(argv), argv);
 
   context = daemon->dhcp6;
 
   assert_true(context);
+  config = find_config(daemon->dhcp_conf, context, clid, clid_len,
+		       defined_client.hwaddr, defined_client.hwaddr_len,
+		       defined_client.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+  assert_true(config);
+  assert_string_equal(config->hostname, "tag-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
 		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
@@ -344,7 +358,10 @@ static void test_dhcp_mixed(void **state)
 	  "--dhcp-host=192.168.1.13,only-host",
 	  "--dhcp-range=fd27:807d:181c:fb81::d000,fd27:807d:181c:fb81::dfff,64,10",
 	  "--dhcp-host=11:22:33:44:55:66,[fd27:807d:181c:fb81::d12],mac-host6",
+	  "--dhcp-host=tag:eth0,11:22:33:44:55:66,192.168.1.14,[fd27:807d:181c:fb81::d12],tag-host",
 	  "--dhcp-host=[fd27:807d:181c:fb81::d13],only-host",
+	  "--dhcp-host=tag:eth0, 66:55:44:33:22:11, [fd27:807d:181c:fb81::d12], alt-host",
+	  "--dhcp-host=de:ad:*:*:be:ef, [fd27:807d:181c:fb81::d15], wildmac-host",
   };
   unsigned char *clid = NULL;
   int clid_len = 0;
@@ -355,11 +372,21 @@ static void test_dhcp_mixed(void **state)
   struct hwaddr_config undefined_client = {
 	6, 1, { 0x12, 0x23, 0x34, 0x45, 0x56, 0x67, 0x0 }, 0, NULL,
   };
+  struct hwaddr_config alt = {
+	6, 1, { 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x0 }, 0, NULL,
+  };
+  struct hwaddr_config wildmac = {
+	6, 1, { 0xde, 0xad, 0x44, 0x33, 0xbe, 0xef, 0x0 }, 0, NULL,
+  };
+  struct dhcp_netid eth0 = { "eth0", NULL };
 
   testcore_main(ARRAY_SIZE(argv), argv);
 
   assert_true(daemon->dhcp);
   assert_true(daemon->dhcp6);
+
+  sort_configs(&daemon->dhcp_conf);
+
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
 		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
@@ -390,6 +417,34 @@ static void test_dhcp_mixed(void **state)
   assert_true(config);
   assert_string_equal(config->hostname, "only-host");
   assert_false(config->hwaddr);
+
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, "tag-host", &eth0, CONFIG_ADDR);
+  assert_true(config);
+  assert_string_equal(config->hostname, "tag-host");
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
+		       undefined_client.hwaddr, undefined_client.hwaddr_len,
+		       undefined_client.hwaddr_type, "tag-host", &eth0, CONFIG_ADDR6);
+  assert_true(config);
+  assert_string_equal(config->hostname, "tag-host");
+
+  /* Intentionally search wrong address type */
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       alt.hwaddr, alt.hwaddr_len,
+		       alt.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+  assert_false(config);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       alt.hwaddr, alt.hwaddr_len,
+		       alt.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+  assert_non_null(config);
+  assert_string_equal(config->hostname, "alt-host");
+
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
+		       wildmac.hwaddr, wildmac.hwaddr_len,
+		       wildmac.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+  assert_non_null(config);
+  assert_string_equal(config->hostname, "wildmac-host");
 }
 
 
