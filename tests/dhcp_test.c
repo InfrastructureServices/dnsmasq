@@ -20,6 +20,7 @@
  * unsupported options cannot be tested now. */
 
 #include "test.h"
+#include <stdlib.h>
 
 #if 0
 /* dhcp-range, stored in daemon->dhcp */
@@ -158,6 +159,95 @@ $18 = {
   };
   unsigned char hwaddr[] = { 58, 26, 126, 54, 37, 73, 0 };
 #endif
+
+#define EQUAL_OR_RETURN(expr, d) do { \
+				      (d) = (expr); \
+				      if ((d) != 0) \
+					return (d); \
+				 } while (0)
+
+static int compare_netid(const struct dhcp_netid *f1, const struct dhcp_netid *f2)
+{
+  int d;
+  while (f1 && f2) {
+    EQUAL_OR_RETURN(strcmp(f1->net, f2->net), d);
+    f1 = f1->next;
+    f2 = f2->next;
+  }
+  return ((f1 != NULL) - (f2 != NULL));
+}
+
+static int compare_hwaddr(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
+{
+  int d;
+  while (hw1 && hw2)
+    {
+      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+
+      hw1 = hw1->next;
+      hw2 = hw2->next;
+  }
+  return ((hw1 != NULL) - (hw2 != NULL));
+}
+
+static int compare_dhcp_config(const struct dhcp_config *c1, const struct dhcp_config *c2)
+{
+  int d;
+
+  EQUAL_OR_RETURN(compare_netid(c1->filter, c2->filter), d);
+  EQUAL_OR_RETURN( ((c1->flags & CONFIG_CLID) != 0) - ((c2->flags & CONFIG_CLID) != 0), d);
+  EQUAL_OR_RETURN(c1->clid_len - c2->clid_len, d);
+  if (c1->clid_len > 0)
+    {
+      EQUAL_OR_RETURN(memcmp(c1->clid, c2->clid, c1->clid_len), d);
+    }
+
+  EQUAL_OR_RETURN(compare_hwaddr(c1->hwaddr, c2->hwaddr), d);
+  EQUAL_OR_RETURN(((c1->flags & CONFIG_NAME) != 0) - ((c2->flags & CONFIG_NAME) != 0), d);
+  if ((c1->flags & CONFIG_NAME) != 0)
+    {
+      EQUAL_OR_RETURN(strcmp(c1->hostname, c2->hostname), d);
+    }
+
+  return 0;
+}
+
+static int compare_config_ptr(const void *c1, const void *c2)
+{
+  return -compare_dhcp_config(*((const struct dhcp_config **)c1),
+			     *((const struct dhcp_config **)c2));
+}
+
+static void sort_configs(struct dhcp_config **configs)
+{
+  struct dhcp_config **cfga;
+  struct dhcp_config *cfg = NULL;
+  size_t count = 0;
+  size_t i=0;
+
+  for (cfg=*configs; cfg; cfg = cfg->next)
+    ++count;
+
+  if (count == 0)
+    return;
+
+  cfga = safe_malloc(count*sizeof(struct dhcp_config));
+  memset(cfga, 0, count*sizeof(*cfga));
+
+  for (i = 0, cfg= *configs; cfg && i < count; i++, cfg = cfg->next)
+    cfga[i] = cfg;
+
+  qsort(cfga, count, sizeof(cfga[0]), &compare_config_ptr);
+
+  *configs = cfg = cfga[0];
+  for (i=1; i<count; i++, cfg = cfg->next)
+    cfg->next = cfga[i];
+  cfg->next = NULL;
+  free(cfga);
+}
 
 static void test_dhcp_ipv4(void **state)
 {
