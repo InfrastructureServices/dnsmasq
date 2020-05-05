@@ -177,6 +177,41 @@ static int compare_netid(const struct dhcp_netid *f1, const struct dhcp_netid *f
   return ((f1 != NULL) - (f2 != NULL));
 }
 
+static int compare_hwaddr_wild(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
+{
+  int d;
+  while (hw1 && hw2)
+    {
+      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      EQUAL_OR_RETURN(hw1->wildcard_mask - hw2->wildcard_mask, d);
+      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+
+      hw1 = hw1->next;
+      hw2 = hw2->next;
+  }
+  return ((hw1 != NULL) - (hw2 != NULL));
+}
+
+static int compare_hwaddr_nowild(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
+{
+  int d;
+  while (hw1 && hw2)
+    {
+      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      if (hw1->wildcard_mask != 0)
+	return 0;
+      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+
+      hw1 = hw1->next;
+      hw2 = hw2->next;
+  }
+  return ((hw1 != NULL) - (hw2 != NULL));
+}
+
 static int compare_hwaddr(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
 {
   int d;
