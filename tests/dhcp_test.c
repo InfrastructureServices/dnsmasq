@@ -160,7 +160,7 @@ $18 = {
   unsigned char hwaddr[] = { 58, 26, 126, 54, 37, 73, 0 };
 #endif
 
-#define EQUAL_OR_RETURN(expr, d) do { \
+#define ZERO_OR_RETURN(expr, d) do { \
 				      (d) = (expr); \
 				      if ((d) != 0) \
 					return (d); \
@@ -170,7 +170,7 @@ static int compare_netid(const struct dhcp_netid *f1, const struct dhcp_netid *f
 {
   int d;
   while (f1 && f2) {
-    EQUAL_OR_RETURN(strcmp(f1->net, f2->net), d);
+    ZERO_OR_RETURN(strcmp(f1->net, f2->net), d);
     f1 = f1->next;
     f2 = f2->next;
   }
@@ -182,11 +182,11 @@ static int compare_hwaddr_wild(const struct hwaddr_config *hw1, const struct hwa
   int d;
   while (hw1 && hw2)
     {
-      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
-      EQUAL_OR_RETURN(hw1->wildcard_mask - hw2->wildcard_mask, d);
-      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
-      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
-      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+      ZERO_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      ZERO_OR_RETURN(hw1->wildcard_mask - hw2->wildcard_mask, d);
+      ZERO_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      ZERO_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      ZERO_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
 
       hw1 = hw1->next;
       hw2 = hw2->next;
@@ -199,12 +199,12 @@ static int compare_hwaddr_nowild(const struct hwaddr_config *hw1, const struct h
   int d;
   while (hw1 && hw2)
     {
-      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      ZERO_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
       if (hw1->wildcard_mask != 0)
 	return 0;
-      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
-      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
-      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+      ZERO_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      ZERO_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      ZERO_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
 
       hw1 = hw1->next;
       hw2 = hw2->next;
@@ -217,10 +217,10 @@ static int compare_hwaddr(const struct hwaddr_config *hw1, const struct hwaddr_c
   int d;
   while (hw1 && hw2)
     {
-      EQUAL_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
-      EQUAL_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
-      EQUAL_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
-      EQUAL_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
+      ZERO_OR_RETURN((hw1->wildcard_mask == 0) - (hw2->wildcard_mask == 0), d);
+      ZERO_OR_RETURN(hw1->hwaddr_type - hw2->hwaddr_type, d);
+      ZERO_OR_RETURN(hw1->hwaddr_len - hw2->hwaddr_len, d);
+      ZERO_OR_RETURN(memcmp(hw1->hwaddr, hw2->hwaddr, hw1->hwaddr_len), d);
 
       hw1 = hw1->next;
       hw2 = hw2->next;
@@ -232,23 +232,25 @@ static int compare_dhcp_config(const struct dhcp_config *c1, const struct dhcp_c
 {
   int d;
 
-  EQUAL_OR_RETURN(compare_netid(c1->filter, c2->filter), d);
-  EQUAL_OR_RETURN( ((c1->flags & CONFIG_CLID) != 0) - ((c2->flags & CONFIG_CLID) != 0), d);
-  EQUAL_OR_RETURN(c1->clid_len - c2->clid_len, d);
+  ZERO_OR_RETURN(compare_netid(c1->filter, c2->filter), d);
+  ZERO_OR_RETURN( ((c1->flags & CONFIG_CLID) != 0) - ((c2->flags & CONFIG_CLID) != 0), d);
+  ZERO_OR_RETURN(c1->clid_len - c2->clid_len, d);
   if (c1->clid_len > 0)
     {
-      EQUAL_OR_RETURN(memcmp(c1->clid, c2->clid, c1->clid_len), d);
+      ZERO_OR_RETURN(memcmp(c1->clid, c2->clid, c1->clid_len), d);
     }
 
-  EQUAL_OR_RETURN(compare_hwaddr(c1->hwaddr, c2->hwaddr), d);
-  EQUAL_OR_RETURN(((c1->flags & CONFIG_NAME) != 0) - ((c2->flags & CONFIG_NAME) != 0), d);
+  ZERO_OR_RETURN(compare_hwaddr(c1->hwaddr, c2->hwaddr), d);
+  ZERO_OR_RETURN(((c1->flags & CONFIG_NAME) != 0) - ((c2->flags & CONFIG_NAME) != 0), d);
   if ((c1->flags & CONFIG_NAME) != 0)
     {
-      EQUAL_OR_RETURN(strcmp(c1->hostname, c2->hostname), d);
+      ZERO_OR_RETURN(strcmp(c1->hostname, c2->hostname), d);
     }
 
   return 0;
 }
+
+#undef ZERO_OR_RETURN
 
 static int compare_config_ptr(const void *c1, const void *c2)
 {
@@ -256,21 +258,19 @@ static int compare_config_ptr(const void *c1, const void *c2)
 			     *((const struct dhcp_config **)c2));
 }
 
-static void sort_configs(struct dhcp_config **configs)
+static size_t dhcp_config_count(const struct dhcp_config *cfg)
 {
-  struct dhcp_config **cfga;
-  struct dhcp_config *cfg = NULL;
   size_t count = 0;
-  size_t i=0;
-
-  for (cfg=*configs; cfg; cfg = cfg->next)
+  for ( ; cfg; cfg = cfg->next)
     ++count;
+  return count;
+}
 
-  if (count == 0)
-    return;
-
-  cfga = safe_malloc(count*sizeof(struct dhcp_config));
-  memset(cfga, 0, count*sizeof(*cfga));
+static void dhcp_config_sort_array(struct dhcp_config **configs,
+			       struct dhcp_config **cfga, size_t count)
+{
+  struct dhcp_config *cfg = NULL;
+  size_t i=0;
 
   for (i = 0, cfg= *configs; cfg && i < count; i++, cfg = cfg->next)
     cfga[i] = cfg;
@@ -281,6 +281,21 @@ static void sort_configs(struct dhcp_config **configs)
   for (i=1; i<count; i++, cfg = cfg->next)
     cfg->next = cfga[i];
   cfg->next = NULL;
+}
+
+static void dhcp_config_sort(struct dhcp_config **configs)
+{
+  struct dhcp_config **cfga;
+  size_t count = 0;
+
+  count = dhcp_config_count(*configs);
+  if (count == 0)
+    return;
+
+  cfga = safe_malloc(count*sizeof(struct dhcp_config));
+  memset(cfga, 0, count*sizeof(*cfga));
+  dhcp_config_sort_array(configs, cfga, count);
+
   free(cfga);
 }
 
@@ -420,7 +435,7 @@ static void test_dhcp_mixed(void **state)
   assert_true(daemon->dhcp);
   assert_true(daemon->dhcp6);
 
-  sort_configs(&daemon->dhcp_conf);
+  dhcp_config_sort(&daemon->dhcp_conf);
 
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
