@@ -280,14 +280,18 @@ static int is_config_in_context(struct dhcp_context *context, struct dhcp_config
 {
   if (!context) /* called via find_config() from lease_update_from_configs() */
     return 1; 
-  
+
+  /* No address present in config == in context */
+  if (!(config->flags & (CONFIG_ADDR | CONFIG_ADDR6)))
+    return 1;
+
 #ifdef HAVE_DHCP6
   if (context->flags & CONTEXT_V6)
     {
        struct addrlist *addr_list;
 
        if (!(config->flags & CONFIG_ADDR6))
-	 return 1;
+	 return 0;
        
         for (; context; context = context->current)
 	  for (addr_list = config->addr6; addr_list; addr_list = addr_list->next)
@@ -303,7 +307,7 @@ static int is_config_in_context(struct dhcp_context *context, struct dhcp_config
 #endif
     {
       if (!(config->flags & CONFIG_ADDR))
-	return 1;
+	return 0;
       
       for (; context; context = context->current)
 	if ((config->flags & CONFIG_ADDR) && is_same_net(config->addr, context->start, context->netmask))
