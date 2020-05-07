@@ -301,6 +301,13 @@ static void dhcp_config_sort(struct dhcp_config **configs)
   free(cfga);
 }
 
+#if 0
+#define CFG_TYPE(type) ,(type)
+#else
+/* This is a hack to check original code without config flags */
+#define CFG_TYPE(type)
+#endif
+
 static void test_dhcp_ipv4(void **state)
 {
   char *argv[] = {
@@ -332,21 +339,21 @@ static void test_dhcp_ipv4(void **state)
   assert_true(context);
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+		       defined_client.hwaddr_type, NULL, &eth0 CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "tag-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       defined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "mac-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_false(config);
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, "only-host", NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "only-host");
   assert_false(config->hwaddr);
@@ -381,21 +388,21 @@ static void test_dhcp_ipv6(void **state)
   assert_true(context);
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+		       defined_client.hwaddr_type, NULL, &eth0 CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "tag-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       defined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "mac-host");
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_false(config);
   config = find_config(daemon->dhcp_conf, context, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, "only-host", NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "only-host");
   assert_false(config->hwaddr);
@@ -441,60 +448,60 @@ static void test_dhcp_mixed(void **state)
 
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       defined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "mac-host4");
   config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       defined_client.hwaddr, defined_client.hwaddr_len,
-		       defined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+		       defined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR6));
   assert_true(config);
   assert_string_equal(config->hostname, "mac-host6");
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
   assert_false(config);
   config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+		       undefined_client.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR6));
   assert_false(config);
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, "only-host", NULL CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "only-host");
   assert_false(config->hwaddr);
   config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "only-host", NULL, CONFIG_ADDR6);
+		       undefined_client.hwaddr_type, "only-host", NULL CFG_TYPE(CONFIG_ADDR6));
   assert_true(config);
   assert_string_equal(config->hostname, "only-host");
   assert_false(config->hwaddr);
 
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "tag-host", &eth0, CONFIG_ADDR);
+		       undefined_client.hwaddr_type, "tag-host", &eth0 CFG_TYPE(CONFIG_ADDR));
   assert_true(config);
   assert_string_equal(config->hostname, "tag-host");
   config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       undefined_client.hwaddr, undefined_client.hwaddr_len,
-		       undefined_client.hwaddr_type, "tag-host", &eth0, CONFIG_ADDR6);
+		       undefined_client.hwaddr_type, "tag-host", &eth0 CFG_TYPE(CONFIG_ADDR6));
   assert_true(config);
   assert_string_equal(config->hostname, "tag-host");
 
   /* Intentionally search wrong address type */
   config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
 		       alt.hwaddr, alt.hwaddr_len,
-		       alt.hwaddr_type, NULL, NULL, CONFIG_ADDR);
-  assert_false(config);
-  config = find_config(daemon->dhcp_conf, daemon->dhcp, clid, clid_len,
+		       alt.hwaddr_type, NULL, &eth0 CFG_TYPE(CONFIG_ADDR));
+  assert_null(config);
+  config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       alt.hwaddr, alt.hwaddr_len,
-		       alt.hwaddr_type, NULL, &eth0, CONFIG_ADDR);
+		       alt.hwaddr_type, NULL, &eth0 CFG_TYPE(CONFIG_ADDR));
   assert_non_null(config);
   assert_string_equal(config->hostname, "alt-host");
 
   config = find_config(daemon->dhcp_conf, daemon->dhcp6, clid, clid_len,
 		       wildmac.hwaddr, wildmac.hwaddr_len,
-		       wildmac.hwaddr_type, NULL, NULL, CONFIG_ADDR6);
+		       wildmac.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR6));
   assert_non_null(config);
   assert_string_equal(config->hostname, "wildmac-host");
 }
@@ -556,7 +563,7 @@ static void test_dhcp_speedtest(void **state)
 
       config = find_config(daemon->dhcp_conf, daemon->dhcp, NULL, 0,
 			  conf_template.hwaddr, conf_template.hwaddr_len,
-			  conf_template.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+			  conf_template.hwaddr_type, NULL, NULL CFG_TYPE(CONFIG_ADDR));
       assert_non_null(config);
     }
   }
