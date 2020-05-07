@@ -31,7 +31,10 @@ TEST_OBJS=option_test.o dhcp_test.o
 TEST_SRCS=option_test.c dhcp_test.c
 TESTS=option_test dhcp_test
 
-all: $(TESTS)
+all: src $(TESTS)
+
+src:
+	$(MAKE) -C $(SRC)/..
 
 option_test: option_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
