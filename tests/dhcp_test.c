@@ -177,6 +177,7 @@ static int compare_netid(const struct dhcp_netid *f1, const struct dhcp_netid *f
   return ((f1 != NULL) - (f2 != NULL));
 }
 
+#if 0
 static int compare_hwaddr_wild(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
 {
   int d;
@@ -211,6 +212,7 @@ static int compare_hwaddr_nowild(const struct hwaddr_config *hw1, const struct h
   }
   return ((hw1 != NULL) - (hw2 != NULL));
 }
+#endif
 
 static int compare_hwaddr(const struct hwaddr_config *hw1, const struct hwaddr_config *hw2)
 {
@@ -497,6 +499,68 @@ static void test_dhcp_mixed(void **state)
   assert_string_equal(config->hostname, "wildmac-host");
 }
 
+static char **argv_test_hosts(unsigned int hosts_count, int *done_count)
+{
+  char *argv_start[] = { ARGV_START, };
+  size_t start_items = ARRAY_SIZE(argv_start);
+  unsigned int i;
+  char template[128];
+  char **argv;
+  unsigned int hi, lo;
+
+  argv= safe_malloc(sizeof(argv_start) + sizeof(char *)*hosts_count+1);
+  memcpy(argv,argv_start, sizeof(argv_start));
+
+  for (i=0; i<hosts_count; i++) {
+    hi = i/255;
+    lo = i%255;
+    snprintf(template, sizeof(template),
+      "--dhcp-host=11:22:33:44:%02x:%02x,192.168.%d.%d,only-host%03d",
+      hi, lo, hi, lo, i);
+    argv[start_items+i] = strdup(template);
+  }
+
+  argv[start_items+i] = NULL;
+  if (done_count)
+    *done_count = start_items+i;
+  return argv;
+}
+
+static void test_dhcp_speedtest(void **state)
+{
+  size_t hosts_count = 200;
+  size_t repeats = 1000;
+  size_t host, repeat;
+  char **argv;
+  int argc;
+  struct hwaddr_config conf_template = {
+	6, 1, { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x0 }, 0, NULL,
+  };
+  struct dhcp_config *config;
+
+  if (getenv("SPEEDTEST_HOSTS"))
+    {
+      hosts_count = strtoul(getenv("SPEEDTEST_HOSTS"), NULL, 10);
+    }
+  if (getenv("SPEEDTEST_REPEATS"))
+    {
+      repeats = strtoul(getenv("SPEEDTEST_REPEATS"), NULL, 10);
+    }
+  argv = argv_test_hosts(hosts_count, &argc);
+  testcore_main(argc, argv);
+
+  for (repeat=0; repeat<repeats; repeat++) {
+    for (host=0; host<hosts_count; host++) {
+      conf_template.hwaddr[4] = (unsigned char) (host/255);
+      conf_template.hwaddr[5] = (unsigned char) (host%255);
+
+      config = find_config(daemon->dhcp_conf, daemon->dhcp, NULL, 0,
+			  conf_template.hwaddr, conf_template.hwaddr_len,
+			  conf_template.hwaddr_type, NULL, NULL, CONFIG_ADDR);
+      assert_non_null(config);
+    }
+  }
+}
 
 int main(int argc, char *argv[])
 {
@@ -504,6 +568,7 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_dhcp_ipv4),
     cmocka_unit_test(test_dhcp_ipv6),
     cmocka_unit_test(test_dhcp_mixed),
+    cmocka_unit_test(test_dhcp_speedtest),
   };
 
   return cmocka_run_group_tests(tests, NULL, NULL);
