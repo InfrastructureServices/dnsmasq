@@ -1,0 +1,21 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ unittests ]
+  pull_request:
+    branches: [ unittests ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: make
+    - name: install dependencies
+      run: sudo apt-get install --yes libcmocka-dev
+    - name: make check
+      run: make check
