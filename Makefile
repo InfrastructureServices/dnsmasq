@@ -103,6 +103,9 @@ clean : mostly_clean
 	rm -f core */core
 	rm -f *~ contrib/*/*~ */*~
 
+check: all
+	$(MAKE) -C tests check
+
 install : all install-common
 
 install-common :

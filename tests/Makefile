@@ -45,6 +45,8 @@ dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 test: $(TESTS)
 	CMOCKA_MESSAGE_OUTPUT=TAP kyua test
 
+check: test
+
 clean:
 	rm -f $(TESTCORE) $(TEST_OBJS) $(TESTS)
 
