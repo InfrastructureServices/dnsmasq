@@ -42,8 +42,14 @@ option_test: option_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
 
-test: $(TESTS)
+# Debian still does not have kyua package
+# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=766577
+# To simplify testing now, omit kyua
+kyua: $(TESTS)
 	CMOCKA_MESSAGE_OUTPUT=TAP kyua test
+
+test: $(TESTS)
+	for TEST in $(TESTS); do echo $$TEST:; ./$$TEST || exit 1; done
 
 check: test
 
