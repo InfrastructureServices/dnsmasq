@@ -55,8 +55,8 @@ size_t rrfilter(struct dns_header *header, size_t plen, int mode)
 }
 
 /* auth.c */
-size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t now, union mysockaddr *peer_addr, 
-		   int local_query, int do_bit, int have_pseudoheader) 
+size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t now, union mysockaddr *peer_addr,
+		   int local_query, int do_bit, int have_pseudoheader)
 {
   return 0;
 }

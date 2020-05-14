@@ -89,6 +89,6 @@ int main(int argc, char *argv[])
     cmocka_unit_test(test_option),
     cmocka_unit_test(test_hex),
   };
-  
+
   return cmocka_run_group_tests(tests, NULL, NULL);
 }
