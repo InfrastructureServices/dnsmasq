@@ -31,5 +31,6 @@ void testcore_main(int argc, char **argv)
   daemon->addrbuff = safe_malloc(ADDRSTRLEN);
   if (option_bool(OPT_EXTRALOG))
     daemon->addrbuff2 = safe_malloc(ADDRSTRLEN);
+  daemon->pipe_to_parent = -1;
 
 }
