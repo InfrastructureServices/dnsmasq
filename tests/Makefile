@@ -70,6 +70,10 @@ option_test: option_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
 
+dns_test: dns_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSSEC_OBJS)
+	@echo $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+
 # Debian still does not have kyua package
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=766577
 # To simplify testing now, omit kyua
