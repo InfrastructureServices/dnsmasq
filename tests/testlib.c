@@ -48,12 +48,6 @@ int add_to_ipset(const char *setname, const union all_addr *ipaddr, int flags, i
   return -1;
 }
 
-/* rrfilter.c */
-size_t rrfilter(struct dns_header *header, size_t plen, int mode)
-{
-  return plen;
-}
-
 /* auth.c */
 size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t now, union mysockaddr *peer_addr,
 		   int local_query, int do_bit, int have_pseudoheader)
@@ -83,3 +77,6 @@ void queue_script(int action, struct dhcp_lease *lease, char *hostname, time_t n
 void queue_arp(int action, unsigned char *mac, int maclen, int family, union all_addr *addr)
 {}
 #endif
+
+void clear_cache_and_reload(time_t now)
+{}

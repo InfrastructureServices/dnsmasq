@@ -14,24 +14,52 @@
 # Do not optimize too much. dnsmasq object files are optimized already
 # but tests need easier debugging by default
 CFLAGS=-O0 -Wall -ggdb
-SRC=../src
+top=..
+SRC=$(top)/src
 CPPFLAGS=-I$(SRC)
 LIBS=-lcmocka
+
+PKG_CONFIG = pkg-config
+COPTS =          $(shell cat $(SRC)/.copts_*)
+dbus_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --cflags dbus-1`
+dbus_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --libs dbus-1`
+ubus_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_UBUS "" --copy -lubox -lubus`
+idn_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_IDN $(PKG_CONFIG) --cflags libidn`
+idn_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_IDN $(PKG_CONFIG) --libs libidn`
+idn2_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LIBIDN2 $(PKG_CONFIG) --cflags libidn2`
+idn2_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LIBIDN2 $(PKG_CONFIG) --libs libidn2`
+ct_cflags =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CONNTRACK $(PKG_CONFIG) --cflags libnetfilter_conntrack`
+ct_libs =       `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CONNTRACK $(PKG_CONFIG) --libs libnetfilter_conntrack`
+lua_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --cflags lua5.2`
+lua_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --libs lua5.2`
+nettle_cflags = `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC $(PKG_CONFIG) --cflags nettle hogweed`
+nettle_libs =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC $(PKG_CONFIG) --libs nettle hogweed`
+gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy -lgmp`
+sunos_libs =    `if uname | grep SunOS >/dev/null 2>&1; then echo -lsocket -lnsl -lposix4; fi`
+
 
 DNSMASQ_OBJS=$(SRC)/option.o $(SRC)/log.o $(SRC)/util.o $(SRC)/poll.o \
 		  $(SRC)/cache.o $(SRC)/network.o $(SRC)/netlink.o $(SRC)/dhcp-common.o \
 		  $(SRC)/dhcp.o $(SRC)/dhcp6.o $(SRC)/rfc2131.o $(SRC)/rfc3315.o \
 		  $(SRC)/rfc1035.o $(SRC)/forward.o $(SRC)/loop.o $(SRC)/lease.o \
 		  $(SRC)/domain.o $(SRC)/radv.o $(SRC)/outpacket.o $(SRC)/arp.o $(SRC)/blockdata.o \
-		  $(SRC)/edns0.o $(SRC)/dump.o
+		  $(SRC)/edns0.o $(SRC)/dump.o \
+		  $(SRC)/dnssec.o $(SRC)/crypto.o $(SRC)/dbus.o $(SRC)/rrfilter.o $(SRC)/metrics.o
+
 TESTCORE=testcore.o testlib.o
 TESTCORE_SRCS=test.h testcore.c testlib.c
 
 TEST_OBJS=option_test.o dhcp_test.o
 TEST_SRCS=option_test.c dhcp_test.c
-TESTS=option_test dhcp_test
+TESTS=option_test dhcp_test dns_test
+
+.PHONY: all show_flags src kyua test check tags
 
 all: src $(TESTS)
+
+CPPFLAGS +=	$(COPTS)
+CPPFLAGS +=	$(version) $(dbus_cflags) $(idn2_cflags) $(idn_cflags) $(ct_cflags) $(lua_cflags) $(nettle_cflags)
+LIBS +=		$(dbus_libs) $(idn2_libs) $(idn_libs) $(ct_libs) $(lua_libs) $(sunos_libs) $(nettle_libs) $(gmp_libs) $(ubus_libs)
 
 src:
 	$(MAKE) -C $(SRC)/..
@@ -52,6 +80,10 @@ test: $(TESTS)
 	for TEST in $(TESTS); do echo $$TEST:; ./$$TEST || exit 1; done
 
 check: test
+
+show_flags:
+	@echo "CPPFLAGS: $(CPPFLAGS)"
+	@echo "LIBS: $(LIBS)"
 
 clean:
 	rm -f $(TESTCORE) $(TEST_OBJS) $(TESTS)

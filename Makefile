@@ -158,7 +158,7 @@ bloatcheck : $(BUILDDIR)/dnsmasq_baseline mostly_clean all
 
 $(copts_conf): $(hdrs)
 	@rm -f *.o .copts_*
-	@touch $@
+	@echo "$(COPTS)" > $@
 
 $(objs:.o=.c) $(hdrs):
 	ln -s $(top)/$(SRC)/$@ .
