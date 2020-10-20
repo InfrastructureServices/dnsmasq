@@ -22,6 +22,18 @@
 #include "test.h"
 #include <stdlib.h>
 
+struct dns_packet {
+  union {
+    struct dns_header *header;
+    unsigned char *data;
+  };
+  size_t len;
+};
+
+#define FREE_NULL(var)  free(var); var = NULL
+#define MAKE_PACKET(packet, d) do { (packet).len = sizeof(d); (packet).data = (d); } while (0)
+
+
 static void daemon_allocate()
 {
 #ifdef HAVE_DNSSEC
@@ -50,7 +62,6 @@ static void daemon_allocate()
   cache_reload(); /**< Initializes trust anchor records. */
 }
 
-#define FREE_NULL(var)  free(var); var = NULL
 
 static void daemon_free()
 {
@@ -68,15 +79,44 @@ static void daemon_free()
 #endif
 }
 
-struct dns_packet {
-  union {
-    struct dns_header *header;
-    unsigned char *data;
-  };
-  size_t len;
-};
 
-#define MAKE_PACKET(packet, d) do { (packet).len = sizeof(d); (packet).data = (d); } while (0)
+static void test_thekelleys(void **state)
+{
+  char *argv[] = {
+	  ARGV_START,
+	  "--no-resolv",
+  };
+  unsigned char reply[] = {
+  0x1e, 0x78, 0x81, 0x80,  0x0, 0x1, 0x0, 0x2,  0x0, 0x0, 0x0, 0x0, // header
+  0x3, 0x77, 0x77, 0x77, 0xa, 0x74, 0x68, 0x65, 0x6b, 0x65, 0x6c,
+  0x6c, 0x65, 0x79, 0x73, 0x3, 0x6f, 0x72, 0x67, 0x2, 0x75, 0x6b, 0x0, 0x0, 0x1, 0x0, 0x1, 0xc0, 0xc, 0x0, 0x5, 0x0, 0x1, 0x0, 0x0,
+  0xa3, 0xb1, 0x0, 0x2, 0xc0, 0x10, 0xc0, 0x10, 0x0, 0x1, 0x0, 0x1, 0x0, 0x0, 0xa3, 0xb1, 0x0, 0x4, 0xd5, 0x8a, 0x6d, 0x6b
+  };
+  struct dns_packet pkt = { .data=reply, .len=sizeof(reply) };
+  unsigned char *p = (unsigned char *)(pkt.header+1);
+  unsigned char *psave;
+  int rc;
+
+  (void) state;
+  testcore_main(ARRAY_SIZE(argv), argv);
+  daemon_allocate();
+
+  rc = extract_name(pkt.header, pkt.len, &p, daemon->namebuff, 1, 4);
+  assert_true(rc);
+  assert_string_equal(daemon->namebuff, "www.thekelleys.org.uk");
+
+  p += 4;
+  psave = p;
+  strcpy(daemon->namebuff, "wWw.TheKelleys.org.UK");
+  rc = extract_name(pkt.header, pkt.len, &p, daemon->namebuff, 0, 4);
+  assert_int_equal(rc, 1);
+
+  strcpy(daemon->namebuff, "wwX.thekelleys.org.uk");
+  rc = extract_name(pkt.header, pkt.len, &psave, daemon->namebuff, 0, 4);
+  assert_int_equal(rc, 2);
+
+  daemon_free();
+}
 
 #ifdef HAVE_DNSSEC
 static void test_dnssec_validation(void **state)
@@ -86,17 +126,8 @@ static void test_dnssec_validation(void **state)
 	  "--dnssec",
 	  "--trust-anchor=.,20326,8,2,E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D",
 	  "--log-queries",
+	  "--no-resolv",
   };
-
-#if 0
-  struct packet {
-    struct dns_header header;
-    unsigned char data[513];
-  } pkt = {
-    .header = {
-      0x3121, 0x81, 0xa0, 0x100, 0xe00, 0x0, 0x100
-    },
-#endif
 
   /* dig +dnssec . NS reply */
   unsigned char reply_ns[] = {
@@ -202,6 +233,7 @@ static void test_dnssec_validation(void **state)
 int main(int argc, char *argv[])
 {
   const struct CMUnitTest tests[] = {
+    cmocka_unit_test(test_thekelleys),
 #ifdef HAVE_DNSSEC
     cmocka_unit_test(test_dnssec_validation),
 #endif
