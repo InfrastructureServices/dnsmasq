@@ -41,13 +41,20 @@
 
 #ifndef NDA_RTA
 #  define NDA_RTA(r) ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg)))) 
-#endif 
+#endif
+
+/* Used to request refresh of addresses or routes just once,
+ * when multiple changes might be announced. */
+enum async_states {
+  STATE_NEWADDR = (1 << 0),
+  STATE_NEWROUTE = (1 << 1),
+};
 
 
 static struct iovec iov;
 static u32 netlink_pid;
 
-static void nl_async(struct nlmsghdr *h);
+static unsigned nl_async(struct nlmsghdr *h, unsigned state);
 
 char *netlink_init(void)
 {
@@ -159,6 +166,7 @@ int iface_enumerate(int family, void *parm, int (*callback)())
   ssize_t len;
   static unsigned int seq = 0;
   int callback_ok = 1;
+  unsigned state = 0;
 
   struct {
     struct nlmsghdr nlh;
@@ -207,7 +215,7 @@ int iface_enumerate(int family, void *parm, int (*callback)())
 	if (h->nlmsg_pid != netlink_pid || h->nlmsg_type == NLMSG_ERROR)
 	  {
 	    /* May be multicast arriving async */
-	    nl_async(h);
+	    state = nl_async(h, state);
 	  }
 	else if (h->nlmsg_seq != seq)
 	  {
@@ -346,21 +354,25 @@ void netlink_multicast(void)
   ssize_t len;
   struct nlmsghdr *h;
   int flags;
-  
-  /* don't risk blocking reading netlink messages here. */
+  unsigned state = 0;
+
   if ((flags = fcntl(daemon->netlinkfd, F_GETFL)) == -1 ||
       fcntl(daemon->netlinkfd, F_SETFL, flags | O_NONBLOCK) == -1) 
     return;
+
+  do {
+    /* don't risk blocking reading netlink messages here. */
+    while ((len = netlink_recv()) != -1)
   
-  if ((len = netlink_recv()) != -1)
-    for (h = (struct nlmsghdr *)iov.iov_base; NLMSG_OK(h, (size_t)len); h = NLMSG_NEXT(h, len))
-      nl_async(h);
-  
+      for (h = (struct nlmsghdr *)iov.iov_base; NLMSG_OK(h, (size_t)len); h = NLMSG_NEXT(h, len))
+	state = nl_async(h, state);
+  } while (errno == ENOBUFS);
+
   /* restore non-blocking status */
   fcntl(daemon->netlinkfd, F_SETFL, flags);
 }
 
-static void nl_async(struct nlmsghdr *h)
+static unsigned nl_async(struct nlmsghdr *h, unsigned state)
 {
   if (h->nlmsg_type == NLMSG_ERROR)
     {
@@ -368,7 +380,8 @@ static void nl_async(struct nlmsghdr *h)
       if (err->error != 0)
 	my_syslog(LOG_ERR, _("netlink returns error: %s"), strerror(-(err->error)));
     }
-  else if (h->nlmsg_pid == 0 && h->nlmsg_type == RTM_NEWROUTE) 
+  else if (h->nlmsg_pid == 0 && h->nlmsg_type == RTM_NEWROUTE &&
+	   (state & STATE_NEWROUTE)==0)
     {
       /* We arrange to receive netlink multicast messages whenever the network route is added.
 	 If this happens and we still have a DNS packet in the buffer, we re-send it.
@@ -380,10 +393,18 @@ static void nl_async(struct nlmsghdr *h)
       if (rtm->rtm_type == RTN_UNICAST && rtm->rtm_scope == RT_SCOPE_LINK &&
 	  (rtm->rtm_table == RT_TABLE_MAIN ||
 	   rtm->rtm_table == RT_TABLE_LOCAL))
-	queue_event(EVENT_NEWROUTE);
+	{
+	  queue_event(EVENT_NEWROUTE);
+	  state |= STATE_NEWROUTE;
+	}
     }
-  else if (h->nlmsg_type == RTM_NEWADDR || h->nlmsg_type == RTM_DELADDR) 
-    queue_event(EVENT_NEWADDR);
+  else if ((h->nlmsg_type == RTM_NEWADDR || h->nlmsg_type == RTM_DELADDR) &&
+	   (state & STATE_NEWADDR)==0)
+    {
+      queue_event(EVENT_NEWADDR);
+      state |= STATE_NEWADDR;
+    }
+  return state;
 }
 #endif
 
