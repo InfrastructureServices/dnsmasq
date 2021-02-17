@@ -204,10 +204,7 @@ int iface_enumerate(int family, void *parm, int (*callback)())
       if ((len = netlink_recv()) == -1)
 	{
 	  if (errno == ENOBUFS)
-	    {
-	      sleep(1);
-	      goto again;
-	    }
+	    goto again;
 	  return 0;
 	}
 
