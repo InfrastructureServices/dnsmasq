@@ -24,9 +24,9 @@ MANDIR        = $(PREFIX)/share/man
 LOCALEDIR     = $(PREFIX)/share/locale
 BUILDDIR      = $(SRC)
 DESTDIR       = 
-CFLAGS        = -Wall -W -O2
+CFLAGS        = -Wall -W -O2 -ggdb
 LDFLAGS       = 
-COPTS         = 
+COPTS         =  -DHAVE_DBUS -DHAVE_LIBIDN -DHAVE_DNSSEC
 RPM_OPT_FLAGS = 
 LIBS          = 
 
