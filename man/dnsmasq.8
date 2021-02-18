@@ -146,6 +146,11 @@ If the queue of log-lines becomes full, dnsmasq will log the
 overflow, and the number of messages  lost. The default queue length is
 5, a sane value would be 5-25, and a maximum limit of 100 is imposed.
 .TP
+.B --log-listen
+Log changes in listening interfaces. Useful for monitoring automatic changes discovered in
+.B --bind-dynamic
+mode.
+.TP
 .B \-x, --pid-file=<path>
 Specify an alternate path for dnsmasq to record its process-id in. Normally /var/run/dnsmasq.pid.
 .TP

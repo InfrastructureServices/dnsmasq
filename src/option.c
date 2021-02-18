@@ -168,6 +168,7 @@ struct myoption {
 #define LOPT_SINGLE_PORT   359
 #define LOPT_SCRIPT_TIME   360
 #define LOPT_PXE_VENDOR    361
+#define LOPT_LOGLISTEN     362
  
 #ifdef HAVE_GETOPT_LONG
 static const struct option opts[] =  
@@ -314,6 +315,7 @@ static const struct myoption opts[] =
     { "dhcp-duid", 1, 0, LOPT_DUID },
     { "host-record", 1, 0, LOPT_HOST_REC },
     { "bind-dynamic", 0, 0, LOPT_CLVERBIND },
+    { "log-listen", 0, 0, LOPT_LOGLISTEN },
     { "auth-zone", 1, 0, LOPT_AUTHZONE },
     { "auth-server", 1, 0, LOPT_AUTHSERV },
     { "auth-ttl", 1, 0, LOPT_AUTHTTL },
@@ -494,6 +496,7 @@ static struct {
   { LOPT_CAA, ARG_DUP, "<name>,<flags>,<tag>,<value>", gettext_noop("Specify certification authority authorization record"), NULL },  
   { LOPT_RR, ARG_DUP, "<name>,<RR-number>,[<data>]", gettext_noop("Specify arbitrary DNS resource record"), NULL },
   { LOPT_CLVERBIND, OPT_CLEVERBIND, NULL, gettext_noop("Bind to interfaces in use - check for new interfaces"), NULL },
+  { LOPT_LOGLISTEN, OPT_LOGLISTEN, NULL, gettext_noop("Log changes in listening"), NULL },
   { LOPT_AUTHSERV, ARG_ONE, "<NS>,<interface>", gettext_noop("Export local names to global DNS"), NULL },
   { LOPT_AUTHZONE, ARG_DUP, "<domain>,[<subnet>...]", gettext_noop("Domain to export to global DNS"), NULL },
   { LOPT_AUTHTTL, ARG_ONE, "<integer>", gettext_noop("Set TTL for authoritative replies"), NULL },

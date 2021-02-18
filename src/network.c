@@ -589,11 +589,14 @@ static int release_listener(struct listener *l)
 
   if (l->iface->done)
     {
-      int port;
+      if (option_bool(OPT_LOGLISTEN))
+	{
+          int port;
 
-      port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
-      my_syslog(LOG_DEBUG, _("stopped listening on %s(#%d): %s port %d"),
-		l->iface->name, l->iface->index, daemon->addrbuff, port);
+	  port = prettyprint_addr(&l->iface->addr, daemon->addrbuff);
+	  my_syslog(LOG_DEBUG, _("stopped listening on %s(#%d): %s port %d"),
+		    l->iface->name, l->iface->index, daemon->addrbuff, port);
+	}
       /* In case it ever returns */
       l->iface->done = 0;
     }
@@ -1048,7 +1051,7 @@ void create_bound_listeners(int dienow)
 	    /* Don't log the initial set of listen addresses created
                at startup, since this is happening before the logging
                system is initialised and the sign-on printed. */
-            if (!dienow)
+            if (!dienow && option_bool(OPT_LOGLISTEN))
               {
 		int port = prettyprint_addr(&iface->addr, daemon->addrbuff);
 		my_syslog(LOG_DEBUG, _("listening on %s(#%d): %s port %d"),
@@ -1075,7 +1078,7 @@ void create_bound_listeners(int dienow)
 	new->next = daemon->listeners;
 	daemon->listeners = new;
 
-	if (!dienow)
+	if (!dienow && option_bool(OPT_LOGLISTEN))
 	  {
 	    int port = prettyprint_addr(&if_tmp->addr, daemon->addrbuff);
 	    my_syslog(LOG_DEBUG, _("listening on %s port %d"), daemon->addrbuff, port);
