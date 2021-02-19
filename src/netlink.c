@@ -158,7 +158,9 @@ static ssize_t netlink_recv(void)
   
 
 /* family = AF_UNSPEC finds ARP table entries.
-   family = AF_LOCAL finds MAC addresses. */
+   family = AF_LOCAL finds MAC addresses.
+   returns 0 on failure, 1 on success, -1 when restart is required
+*/
 int iface_enumerate(int family, void *parm, int (*callback)())
 {
   struct sockaddr_nl addr;
@@ -178,7 +180,6 @@ int iface_enumerate(int family, void *parm, int (*callback)())
 
   addr.nl_family = AF_NETLINK;
  
- again: 
   if (family == AF_UNSPEC)
     req.nlh.nlmsg_type = RTM_GETNEIGH;
   else if (family == AF_LOCAL)
@@ -204,7 +205,7 @@ int iface_enumerate(int family, void *parm, int (*callback)())
       if ((len = netlink_recv()) == -1)
 	{
 	  if (errno == ENOBUFS)
-	    goto again;
+	    return -1;
 	  return 0;
 	}
 
