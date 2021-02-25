@@ -55,6 +55,7 @@ static struct iovec iov;
 static u32 netlink_pid;
 
 static unsigned nl_async(struct nlmsghdr *h, unsigned state);
+static void nl_multicast_state(unsigned state);
 
 char *netlink_init(void)
 {
@@ -205,7 +206,10 @@ int iface_enumerate(int family, void *parm, int (*callback)())
       if ((len = netlink_recv()) == -1)
 	{
 	  if (errno == ENOBUFS)
-	    return -1;
+	    {
+	      nl_multicast_state(state);
+	      return -1;
+	    }
 	  return 0;
 	}
 
@@ -347,12 +351,11 @@ int iface_enumerate(int family, void *parm, int (*callback)())
     }
 }
 
-void netlink_multicast(void)
+static void nl_multicast_state(unsigned state)
 {
   ssize_t len;
   struct nlmsghdr *h;
   int flags;
-  unsigned state = 0;
 
   if ((flags = fcntl(daemon->netlinkfd, F_GETFL)) == -1 ||
       fcntl(daemon->netlinkfd, F_SETFL, flags | O_NONBLOCK) == -1) 
@@ -369,6 +372,13 @@ void netlink_multicast(void)
   /* restore non-blocking status */
   fcntl(daemon->netlinkfd, F_SETFL, flags);
 }
+
+void netlink_multicast(void)
+{
+  unsigned state = 0;
+  nl_multicast_state(state);
+}
+
 
 static unsigned nl_async(struct nlmsghdr *h, unsigned state)
 {
