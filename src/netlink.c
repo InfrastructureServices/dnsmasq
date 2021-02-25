@@ -61,7 +61,6 @@ char *netlink_init(void)
 {
   struct sockaddr_nl addr;
   socklen_t slen = sizeof(addr);
-  int opt = 1;
 
   addr.nl_family = AF_NETLINK;
   addr.nl_pad = 0;
@@ -99,10 +98,6 @@ char *netlink_init(void)
   
   iov.iov_len = 100;
   iov.iov_base = safe_malloc(iov.iov_len);
-  
-  if (daemon->kernel_version >= KERNEL_VERSION(2,6,30) &&
-      setsockopt(daemon->netlinkfd, SOL_NETLINK, NETLINK_NO_ENOBUFS, &opt, sizeof(opt)) == -1)
-    return _("warning: failed to set NETLINK_NO_ENOBUFS on netlink socket");
   
   return NULL;
 }
