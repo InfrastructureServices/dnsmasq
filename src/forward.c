@@ -2174,16 +2174,6 @@ static int random_sock(struct server *s)
   return -1;
 }
 
-/* compare source addresses and interface, serv2 can be null. */
-static int server_isequal(const struct server *serv1,
-			 const struct server *serv2)
-{
-  return (serv2 &&
-    serv2->ifindex == serv1->ifindex &&
-    sockaddr_isequal(&serv2->source_addr, &serv1->source_addr) &&
-    strncmp(serv2->interface, serv1->interface, IF_NAMESIZE) == 0);
-}
-
 /* fdlp points to chain of randomfds already in use by transaction.
    If there's already a suitable one, return it, else allocate a 
    new one and add it to the list. 
@@ -2202,12 +2192,13 @@ int allocate_rfd(struct randfd_list **fdlp, struct server *serv)
   int fd = 0;
   
   /* If server has a pre-allocated fd, use that. */
-  if (serv->sfd)
+  if (serv->sfd && serv->sfd->fd != -1)
     return serv->sfd->fd;
   
   /* existing suitable random port socket linked to this transaction? */
   for (rfl = *fdlp; rfl; rfl = rfl->next)
-    if (server_isequal(serv, rfl->rfd->serv))
+    if (rfl->rfd->family == serv->addr.sa.sa_family &&
+	rfl->rfd->sfd == serv->sfd)
       return rfl->rfd->fd;
 
   /* No. need new link. */
@@ -2224,7 +2215,8 @@ int allocate_rfd(struct randfd_list **fdlp, struct server *serv)
 	if ((fd = random_sock(serv)) != -1)
     	  {
 	    rfd = &daemon->randomsocks[i];
-	    rfd->serv = serv;
+	    rfd->sfd = serv->sfd;
+	    rfd->family = serv->addr.sa.sa_family;
 	    rfd->fd = fd;
 	    rfd->refcount = 1;
 	  }
@@ -2237,7 +2229,8 @@ int allocate_rfd(struct randfd_list **fdlp, struct server *serv)
       {
 	i = (j + finger) % RANDOM_SOCKS;
 	if (daemon->randomsocks[i].refcount != 0 &&
-	    server_isequal(serv, daemon->randomsocks[i].serv) &&
+	    serv->addr.sa.sa_family == daemon->randomsocks[i].family &&
+	    serv->sfd == daemon->randomsocks[i].sfd &&
 	    daemon->randomsocks[i].refcount != 0xfffe)
 	  {
 	    finger = i + 1;
@@ -2527,18 +2520,11 @@ void resend_query()
 void server_gone(struct server *server)
 {
   struct frec *f;
-  int i;
   
   for (f = daemon->frec_list; f; f = f->next)
     if (f->sentto && f->sentto == server)
       free_frec(f);
 
-  /* If any random socket refers to this server, NULL the reference.
-     No more references to the socket will be created in the future. */
-  for (i = 0; i < RANDOM_SOCKS; i++)
-    if (daemon->randomsocks[i].refcount != 0 && daemon->randomsocks[i].serv == server)
-      daemon->randomsocks[i].serv = NULL;
-  
   if (daemon->last_server == server)
     daemon->last_server = NULL;
   

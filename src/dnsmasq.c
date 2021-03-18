@@ -1691,7 +1691,8 @@ static int set_dns_listeners(time_t now)
     get_new_frec(now, &wait, NULL);
   
   for (serverfdp = daemon->sfds; serverfdp; serverfdp = serverfdp->next)
-    poll_listen(serverfdp->fd, POLLIN);
+    if (serverfdp->fd != -1)
+      poll_listen(serverfdp->fd, POLLIN);
     
   for (i = 0; i < RANDOM_SOCKS; i++)
     if (daemon->randomsocks[i].refcount != 0)
@@ -1742,7 +1743,7 @@ static void check_dns_listeners(time_t now)
   int pipefd[2];
   
   for (serverfdp = daemon->sfds; serverfdp; serverfdp = serverfdp->next)
-    if (poll_check(serverfdp->fd, POLLIN))
+    if (serverfdp->fd != -1 && poll_check(serverfdp->fd, POLLIN))
       reply_query(serverfdp->fd, now);
   
   for (i = 0; i < RANDOM_SOCKS; i++)

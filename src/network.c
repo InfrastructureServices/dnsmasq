@@ -1378,11 +1378,29 @@ int local_bind(int fd, union mysockaddr *addr, char *intname, unsigned int ifind
   return 1;
 }
 
+static int allocate_sfd_socket(union mysockaddr *addr, char *intname, unsigned int ifindex)
+{
+  int fd;
+  int opt = 1;
+
+  if ((fd = socket(addr->sa.sa_family, SOCK_DGRAM, 0)) == -1)
+    return -1;
+
+  if ((addr->sa.sa_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) ||
+      !local_bind(fd, addr, intname, ifindex, 0) || !fix_fd(fd))
+    { 
+      int errsave = errno; /* save error from bind/setsockopt. */
+      close(fd);
+      errno = errsave;
+      return -1;
+    }
+  return fd;
+}
+
 static struct serverfd *allocate_sfd(union mysockaddr *addr, char *intname, unsigned int ifindex)
 {
   struct serverfd *sfd;
-  int errsave;
-  int opt = 1;
+  int singlefd = 1;
   
   /* when using random ports, servers which would otherwise use
      the INADDR_ANY/port0 socket have sfd set to NULL, this is 
@@ -1391,13 +1409,15 @@ static struct serverfd *allocate_sfd(union mysockaddr *addr, char *intname, unsi
     {
       errno = 0;
       
-      if (addr->sa.sa_family == AF_INET &&
-	  addr->in.sin_port == htons(0)) 
-	return NULL;
-
-      if (addr->sa.sa_family == AF_INET6 &&
-	  addr->in6.sin6_port == htons(0)) 
-	return NULL;
+      if ((addr->sa.sa_family == AF_INET &&
+	  addr->in.sin_port == htons(0)) ||
+	  (addr->sa.sa_family == AF_INET6 &&
+	  addr->in6.sin6_port == htons(0)))
+	{
+	  if (intname[0] == 0)
+	    return NULL;
+	  singlefd = 0;
+	}
     }
 
   /* may have a suitable one already */
@@ -1411,21 +1431,16 @@ static struct serverfd *allocate_sfd(union mysockaddr *addr, char *intname, unsi
   errno = ENOMEM; /* in case malloc fails. */
   if (!(sfd = whine_malloc(sizeof(struct serverfd))))
     return NULL;
-  
-  if ((sfd->fd = socket(addr->sa.sa_family, SOCK_DGRAM, 0)) == -1)
-    {
-      free(sfd);
-      return NULL;
-    }
 
-  if ((addr->sa.sa_family == AF_INET6 && setsockopt(sfd->fd, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) == -1) ||
-      !local_bind(sfd->fd, addr, intname, ifindex, 0) || !fix_fd(sfd->fd))
-    { 
-      errsave = errno; /* save error from bind/setsockopt. */
-      close(sfd->fd);
-      free(sfd);
-      errno = errsave;
-      return NULL;
+  sfd->fd = -1;
+  if (singlefd)
+    {
+      sfd->fd = allocate_sfd_socket(addr, intname, ifindex);
+      if (sfd->fd == -1)
+	{
+	  free(sfd);
+	  return NULL;
+	}
     }
 
   safe_strncpy(sfd->interface, intname, sizeof(sfd->interface)); 
@@ -1607,6 +1622,27 @@ void add_update_server(int flags,
     }
 }
 
+static void free_sfd(struct serverfd *sfd)
+{
+  int i;
+  struct randfd_list *rl;
+
+  /* If any random socket refers to this serverfd, invalidate the reference.
+  NULL is valid value in randfd.sfd, cannot use that. */
+  for (i = 0; i < RANDOM_SOCKS; i++)
+    if (daemon->randomsocks[i].refcount != 0 && daemon->randomsocks[i].sfd == sfd)
+      daemon->randomsocks[i].sfd = SERVERFD_INVALID;
+  for (rl = daemon->rfl_poll; rl; rl = rl->next)
+    /* Invalidate sfd pointer so it is no longer reused.
+     * Pending answers might be still received and processed. */
+    if (rl->rfd->sfd == sfd)
+      rl->rfd->sfd = SERVERFD_INVALID;
+
+  if (sfd->fd != -1)
+    close(sfd->fd);
+  free(sfd);
+}
+
 void check_servers(void)
 {
   struct irec *iface;
@@ -1747,8 +1783,7 @@ void check_servers(void)
        if (!sfd->used) 
 	{
 	  *up = sfd->next;
-	  close(sfd->fd);
-	  free(sfd);
+	  free_sfd(sfd);
 	} 
       else
 	up = &sfd->next;

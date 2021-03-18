@@ -541,16 +541,19 @@ union mysockaddr {
 #define SERV_GOT_TCP       32768  /* Got some data from the TCP connection */
 
 struct serverfd {
-  int fd;
+  int fd; /* -1 when random sockets are used */
   union mysockaddr source_addr;
   char interface[IF_NAMESIZE+1];
   unsigned int ifindex, used, preallocated;
   struct serverfd *next;
 };
 
+#define SERVERFD_INVALID ((struct serverfd *) ~0)
+
 struct randfd {
-  struct server *serv;
+  struct serverfd *sfd; /* might be set to SERVERFD_INVALID */
   int fd;
+  short family; /* needed when sfd == NULL */
   unsigned short refcount; /* refcount == 0xffff means overflow record. */
 };
 
