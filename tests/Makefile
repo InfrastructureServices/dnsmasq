@@ -36,8 +36,8 @@ DNSMASQ_OBJS=$(SRC)/option.o $(SRC)/log.o $(SRC)/util.o $(SRC)/poll.o \
 TESTCORE=testcore.o testlib.o
 TESTCORE_SRCS=test.h testcore.c testlib.c
 
-TEST_OBJS=option_test.o dhcp_test.o
-TEST_SRCS=option_test.c dhcp_test.c
+TEST_OBJS=option_test.o dhcp_test.o dns_test.o
+TEST_SRCS=option_test.c dhcp_test.c dns_test.c
 TESTS=option_test dhcp_test dns_test
 
 .PHONY: all show_flags src kyua test check tags
@@ -45,8 +45,8 @@ TESTS=option_test dhcp_test dns_test
 all: src $(TESTS)
 
 CPPFLAGS +=	$(COPTS)
-CPPFLAGS +=	$(version) $(dbus_cflags) $(idn2_cflags) $(idn_cflags) $(ct_cflags) $(lua_cflags) $(nettle_cflags)
-LIBS +=		$(dbus_libs) $(idn2_libs) $(idn_libs) $(ct_libs) $(lua_libs) $(sunos_libs) $(nettle_libs) $(gmp_libs) $(ubus_libs)
+CPPFLAGS +=	$(all_cflags)
+LIBS +=		$(all_libs)
 
 src:
 	$(MAKE) -C $(SRC)/..
