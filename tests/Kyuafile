@@ -1,6 +1,8 @@
-# export CMOCKA_MESSAGE_OUTPUT=TAP
+--
+-- Run with CMOCKA_MESSAGE_OUTPUT=TAP kyua test
 syntax(2)
 test_suite('dnsmasq')
 
 tap_test_program{name='option_test'}
 tap_test_program{name='dhcp_test'}
+tap_test_program{name='dns_test'}

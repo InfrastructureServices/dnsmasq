@@ -52,14 +52,13 @@ src:
 	$(MAKE) -C $(SRC)/..
 
 option_test: option_test.o $(TESTCORE) $(DNSMASQ_OBJS)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ option_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(LIBS)
 
 dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(LIBS)
 
 dns_test: dns_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSSEC_OBJS)
-	@echo $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $+ $(LIBS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ dns_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSSEC_OBJS) $(LIBS)
 
 # Debian still does not have kyua package
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=766577
