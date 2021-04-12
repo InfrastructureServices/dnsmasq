@@ -15,31 +15,13 @@
 # but tests need easier debugging by default
 CFLAGS=-O0 -Wall -ggdb
 top=..
-SRC=$(top)/src
+
+include $(top)/Makefile.config
+
 CPPFLAGS=-I$(SRC)
 LIBS=-lcmocka
-
 PKG_CONFIG = pkg-config
 COPTS =          $(shell cat $(SRC)/.copts_*)
-dbus_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --cflags dbus-1`
-dbus_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DBUS $(PKG_CONFIG) --libs dbus-1`
-ubus_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_UBUS "" --copy '-lubox -lubus'`
-idn_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_IDN $(PKG_CONFIG) --cflags libidn`
-idn_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_IDN $(PKG_CONFIG) --libs libidn`
-idn2_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LIBIDN2 $(PKG_CONFIG) --cflags libidn2`
-idn2_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LIBIDN2 $(PKG_CONFIG) --libs libidn2`
-ct_cflags =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CONNTRACK $(PKG_CONFIG) --cflags libnetfilter_conntrack`
-ct_libs =       `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_CONNTRACK $(PKG_CONFIG) --libs libnetfilter_conntrack`
-lua_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --cflags lua5.2`
-lua_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_LUASCRIPT $(PKG_CONFIG) --libs lua5.2`
-nettle_cflags = `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CONFIG) --cflags 'nettle hogweed' \
-                                                        HAVE_CRYPTOHASH $(PKG_CONFIG) --cflags nettle \
-                                                        HAVE_NETTLEHASH $(PKG_CONFIG) --cflags nettle`
-nettle_libs =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC     $(PKG_CONFIG) --libs 'nettle hogweed' \
-                                                        HAVE_CRYPTOHASH $(PKG_CONFIG) --libs nettle \
-                                                        HAVE_NETTLEHASH $(PKG_CONFIG) --libs nettle`
-gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --copy -lgmp`
-sunos_libs =    `if uname | grep SunOS >/dev/null 2>&1; then echo -lsocket -lnsl -lposix4; fi`
 
 
 DNSMASQ_OBJS=$(SRC)/option.o $(SRC)/log.o $(SRC)/util.o $(SRC)/poll.o \
@@ -48,7 +30,8 @@ DNSMASQ_OBJS=$(SRC)/option.o $(SRC)/log.o $(SRC)/util.o $(SRC)/poll.o \
 		  $(SRC)/rfc1035.o $(SRC)/forward.o $(SRC)/loop.o $(SRC)/lease.o \
 		  $(SRC)/domain.o $(SRC)/radv.o $(SRC)/outpacket.o $(SRC)/arp.o $(SRC)/blockdata.o \
 		  $(SRC)/edns0.o $(SRC)/dump.o \
-		  $(SRC)/dnssec.o $(SRC)/crypto.o $(SRC)/dbus.o $(SRC)/rrfilter.o $(SRC)/metrics.o
+		  $(SRC)/dnssec.o $(SRC)/crypto.o $(SRC)/dbus.o $(SRC)/rrfilter.o $(SRC)/metrics.o \
+		  $(SRC)/hash_questions.o
 
 TESTCORE=testcore.o testlib.o
 TESTCORE_SRCS=test.h testcore.c testlib.c
