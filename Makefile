@@ -137,6 +137,7 @@ $(objs): $(copts_conf) $(hdrs)
 	$(CC) $(CFLAGS) $(COPTS) $(i18n) $(build_cflags) $(RPM_OPT_FLAGS) -c $<	
 
 dnsmasq : $(objs)
+	@echo "COPTS: $(COPTS) file:$(copts_conf)"
 	$(CC) $(LDFLAGS) -o $@ $(objs) $(build_libs) $(LIBS) 
 
 dnsmasq.pot : $(objs:.o=.c) $(hdrs)

@@ -15,13 +15,14 @@
 # but tests need easier debugging by default
 CFLAGS=-O0 -Wall -ggdb
 top=..
+COPTS!=cat $(top)/src/.copts_*
+COPTS?=$(shell cat $(top)/src/.copts_*)
 
 include $(top)/Makefile.config
 
 CPPFLAGS=-I$(SRC)
 LIBS=-lcmocka
 PKG_CONFIG = pkg-config
-COPTS =          $(shell cat $(SRC)/.copts_*)
 
 
 DNSMASQ_OBJS=$(SRC)/option.o $(SRC)/log.o $(SRC)/util.o $(SRC)/poll.o \
@@ -58,6 +59,7 @@ dhcp_test: dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ dhcp_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(LIBS)
 
 dns_test: dns_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSSEC_OBJS)
+	@echo "COPTS: $(COPTS) file:$(copts_conf)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ dns_test.o $(TESTCORE) $(DNSMASQ_OBJS) $(DNSSEC_OBJS) $(LIBS)
 
 # Debian still does not have kyua package
@@ -82,6 +84,8 @@ cscope.out: $(TESTCORE_SRCS) $(TEST_SRCS)
 	cscope -R -b -s $(SRC)
 
 tags: cscope.out
+
+$(TEST_OBJS): $(copts_conf)
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
