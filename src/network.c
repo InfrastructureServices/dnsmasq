@@ -1537,6 +1537,29 @@ void cleanup_servers(void)
 #endif
 }
 
+void server_domains_cleanup(void)
+{
+  struct server_domain *sd, *tmp, **up;
+
+  /* unlink and free anything still marked. */
+  for (up = &daemon->server_domains, sd=*up; sd; sd = tmp)
+    {
+      tmp = sd->next;
+      if (sd->flags & SERV_MARK)
+       {
+         *up = sd->next;
+         if (sd->domain)
+	   free(sd->domain);
+	 free(sd);
+       }
+      else {
+        up = &sd->next;
+        if (sd->last_server && (sd->last_server->flags & SERV_MARK))
+	  sd->last_server = NULL;
+      }
+    }
+}
+
 void add_update_server(int flags,
 		       union mysockaddr *addr,
 		       union mysockaddr *source_addr,
@@ -1616,10 +1639,61 @@ void add_update_server(int flags,
     }
 }
 
+static const char *server_get_domain(const struct server *serv)
+{
+  const char *domain = serv->domain;
+
+  if (serv->flags & SERV_HAS_DOMAIN)
+		  /* .example.com is valid */
+    while (*domain == '.')
+      domain++;
+
+  return domain;
+}
+
+struct server_domain *server_domain_find_domain(const char *domain)
+{
+  struct server_domain *sd;
+  for (sd = daemon->server_domains; sd; sd = sd->next)
+    if ((!domain && sd->domain == domain) || (domain && sd->domain && hostname_isequal(domain, sd->domain)))
+      return sd;
+  return NULL;
+}
+
+struct server_domain *server_domain_find_server(const struct server *serv)
+{
+  return server_domain_find_domain(server_get_domain(serv));
+}
+
+static void server_domain_check(struct server *serv)
+{
+  const char *domain = server_get_domain(serv);
+  struct server_domain *sd;
+
+  sd = server_domain_find_domain(domain);
+  if (sd)
+    sd->flags &= (~SERV_MARK); /* found domain, mark active */
+  else if ((sd = whine_malloc(sizeof(struct server_domain))))
+    {
+      /* Ensure all serv->domain values have own record in server_domain.
+       * Add a new record. */
+      if (domain)
+	{
+	  size_t len = strlen(domain)+1;
+	  sd->domain = whine_malloc(len);
+	  if (sd->domain)
+	    memcpy(sd->domain, domain, len);
+	}
+      sd->next = daemon->server_domains;
+      daemon->server_domains = sd;
+    }
+}
+
 void check_servers(void)
 {
   struct irec *iface;
   struct server *serv;
+  struct server_domain *sd;
   struct serverfd *sfd, *tmp, **up;
   int port = 0, count;
   int locals = 0;
@@ -1632,10 +1706,14 @@ void check_servers(void)
   for (sfd = daemon->sfds; sfd; sfd = sfd->next)
     sfd->used = sfd->preallocated;
 
+  for (sd = daemon->server_domains; sd; sd = sd->next)
+    sd->flags |= SERV_MARK;
+
   for (count = 0, serv = daemon->servers; serv; serv = serv->next)
     {
       if (!(serv->flags & (SERV_LITERAL_ADDRESS | SERV_NO_ADDR | SERV_USE_RESOLV | SERV_NO_REBIND)))
 	{
+
 	  /* Init edns_pktsz for newly created server records. */
 	  if (serv->edns_pktsz == 0)
 	    serv->edns_pktsz = daemon->edns_pktsz;
@@ -1651,12 +1729,8 @@ void check_servers(void)
 	      if (serv->flags & SERV_HAS_DOMAIN)
 		{
 		  struct ds_config *ds;
-		  char *domain = serv->domain;
-		  
-		  /* .example.com is valid */
-		  while (*domain == '.')
-		    domain++;
-		  
+		  char *domain = server_get_domain(serv);
+
 		  for (ds = daemon->ds; ds; ds = ds->next)
 		    if (ds->name[0] != 0 && hostname_isequal(domain, ds->name))
 		      break;
@@ -1666,7 +1740,6 @@ void check_servers(void)
 		}
 	    }
 #endif
-
 	  port = prettyprint_addr(&serv->addr, daemon->namebuff);
 	  
 	  /* 0.0.0.0 is nothing, the stack treats it like 127.0.0.1 */
@@ -1701,6 +1774,8 @@ void check_servers(void)
 	  
 	  if (serv->sfd)
 	    serv->sfd->used = 1;
+
+	  server_domain_check(serv);
 	}
       
       if (!(serv->flags & SERV_NO_REBIND) && !(serv->flags & SERV_LITERAL_ADDRESS))
@@ -1763,6 +1838,7 @@ void check_servers(void)
 	up = &sfd->next;
     }
   
+  server_domains_cleanup();
   cleanup_servers();
 }
 
