@@ -24,11 +24,12 @@ MANDIR        = $(PREFIX)/share/man
 LOCALEDIR     = $(PREFIX)/share/locale
 BUILDDIR      = $(SRC)
 DESTDIR       = 
-CFLAGS        = -Wall -W -O2
+CFLAGS        = -Wall -W -O2 -ggdb
 LDFLAGS       = 
-COPTS         = 
+COPTS         = -DHAVE_DNSSEC -DHAVE_DBUS -DHAVE_LIBIDN2
 RPM_OPT_FLAGS = 
 LIBS          = 
+CRYPTO = openssl
 
 #################################################################
 
