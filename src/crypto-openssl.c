@@ -311,26 +311,32 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
 				unsigned char *sig, size_t sig_len,
 				unsigned char *digest, size_t digest_len, int algo)
 {
-  static EC_KEY *eckey = NULL;
+#if 0
   static ECDSA_SIG *ecsig = NULL;
+  static EC_KEY *eckey = NULL;
   BIGNUM *R, *S;
+#endif
+  static EVP_MD_CTX *mdctx = NULL;
+  EVP_PKEY *pkey = NULL;
+  const EVP_MD *md;
 
   unsigned char keybuf[256 + 2];
   const unsigned char *p = keybuf;
   unsigned int t;
   int r;
+  int nid, digest_nid;
 
   switch (algo)
     {
     case 13:
-      if (!eckey && !(eckey = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)))
-        return 0;
+      nid = NID_X9_62_prime256v1;
+      digest_nid = NID_sha256;
       t = 32;
       break;
 
     case 14:
-      if (!eckey && !(eckey = EC_KEY_new_by_curve_name(NID_secp384r1)))
-        return 0;
+      nid = NID_secp384r1;
+      digest_nid = NID_sha384;
       t = 48;
       break;
 
@@ -338,14 +344,22 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
       return 0;
     }
 
+#if 0
   if (!ecsig && !(ecsig = ECDSA_SIG_new()))
     return 0;
+#endif
 
   if (sig_len != 2*t || key_len != 2*t ||
       !blockdata_retrieve(key_data, key_len, keybuf + 1))
     return 0;
 
   keybuf[0] = POINT_CONVERSION_UNCOMPRESSED;
+
+  // FIXME: does not work. Visit man EVP_PKEY_fromdata for high level example
+  pkey = EVP_PKEY_new_raw_public_key(nid, NULL, p, key_len);
+  if (!pkey)
+    return 0;
+#if 0
   if (!o2i_ECPublicKey(&eckey, &p, (int)key_len + 1))
     return 0;
 
@@ -357,14 +371,25 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
   r = ECDSA_do_verify(digest, digest_len, ecsig, eckey);
 
   EC_KEY_free(eckey), eckey = NULL;
+#endif
+
+  md = EVP_get_digestbynid(digest_nid);
+  if (!md)
+    return 0;
+
+  if (mdctx)
+    EVP_MD_CTX_reset(mdctx);
+  else if (!(mdctx = EVP_MD_CTX_new()))
+    return 0;
+
+  if (EVP_DigestVerifyInit(mdctx, NULL, md, NULL, pkey) <= 0)
+    return 0;
+
+  r = EVP_DigestVerify(mdctx, sig, sig_len,
+		       digest, digest_len);
+  EVP_PKEY_free(pkey);
 
   return (r > 0);
-
-err:
-  BN_free(R);
-  BN_free(S);
-
-  return 0;
 }
 
 #ifdef HAVE_GOST
