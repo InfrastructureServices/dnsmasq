@@ -725,6 +725,8 @@ static const struct opttab_t opttab6[] = {
   { "ntp-server", 56, 0 /* OT_ADDR_LIST | OT_RFC1035_NAME */ },
   { "bootfile-url", 59, OT_NAME },
   { "bootfile-param", 60, OT_CSTRING },
+  { "client-arch", 61, 2 | OT_DEC }, /* RFC 5970 */
+  { "client-interface-id", 62, 1 | OT_DEC }, /* RFC 5970 */
   { NULL, 0, 0 }
 };
 #endif
