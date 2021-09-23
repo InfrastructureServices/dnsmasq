@@ -167,6 +167,7 @@ void dhcp_packet(time_t now, int pxe_fd)
   } control_u;
   struct dhcp_bridge *bridge, *alias;
 
+  memset(&control_u, 0, sizeof(control_u));
   msg.msg_controllen = sizeof(control_u);
   msg.msg_control = control_u.control;
   msg.msg_name = &dest;

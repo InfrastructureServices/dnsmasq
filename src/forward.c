@@ -58,6 +58,7 @@ int send_from(int fd, int nowild, char *packet, size_t len,
   if (!nowild)
     {
       struct cmsghdr *cmptr;
+      memset(&control_u, 0, sizeof(control_u));
       msg.msg_control = &control_u;
       msg.msg_controllen = sizeof(control_u);
       cmptr = CMSG_FIRSTHDR(&msg);
@@ -1345,6 +1346,7 @@ void receive_query(struct listener *listen, time_t now)
   iov[0].iov_base = daemon->packet;
   iov[0].iov_len = daemon->edns_pktsz;
     
+  memset(&control_u, 0, sizeof(control_u));
   msg.msg_control = control_u.control;
   msg.msg_controllen = sizeof(control_u);
   msg.msg_flags = 0;
