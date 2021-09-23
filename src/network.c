@@ -1498,6 +1498,7 @@ void check_servers(int no_loop_check)
 {
   struct irec *iface;
   struct server *serv;
+  struct serv_local *sl;
   struct serverfd *sfd, *tmp, **up;
   int port = 0, count;
   int locals = 0;
@@ -1620,21 +1621,21 @@ void check_servers(int no_loop_check)
 
     }
   
-  for (count = 0, serv = daemon->local_domains; serv; serv = serv->next)
+  for (count = 0, sl = daemon->local_domains; sl; sl = sl->next)
     {
        if (++count > SERVERS_LOGGED)
 	 continue;
        
-       if ((serv->flags & SERV_LITERAL_ADDRESS) &&
-	   !(serv->flags & (SERV_6ADDR | SERV_4ADDR | SERV_ALL_ZEROS)) &&
-	   strlen(serv->domain))
+       if ((sl->flags & SERV_LITERAL_ADDRESS) &&
+	   !(sl->flags & (SERV_6ADDR | SERV_4ADDR | SERV_ALL_ZEROS)) &&
+	   sl->domain_len)
 	 {
 	   count--;
 	   if (++locals <= LOCALS_LOGGED)
-	     my_syslog(LOG_INFO, _("using only locally-known addresses for %s"), serv->domain);
+	     my_syslog(LOG_INFO, _("using only locally-known addresses for %s"), sl->domain);
 	 }
-       else if (serv->flags & SERV_USE_RESOLV)
-	 my_syslog(LOG_INFO, _("using standard nameservers for %s"), serv->domain);
+       else if (sl->flags & SERV_USE_RESOLV)
+	 my_syslog(LOG_INFO, _("using standard nameservers for %s"), sl->domain);
     }
   
   if (locals > LOCALS_LOGGED)

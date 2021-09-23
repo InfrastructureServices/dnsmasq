@@ -551,6 +551,9 @@ union mysockaddr {
 #define SERV_DO_DNSSEC      16384  /* Validate DNSSEC when using this server */
 #define SERV_GOT_TCP        32768  /* Got some data from the TCP connection */
 
+/* If the server is USE_RESOLV or LITERAL_ADDRES, it lives on the local_domains chain. */
+#define SERV_IS_LOCAL (SERV_USE_RESOLV | SERV_LITERAL_ADDRESS)
+
 struct serverfd {
   int fd;
   union mysockaddr source_addr;
@@ -592,24 +595,20 @@ struct server {
 };
 
 /* First four fields must match struct server in next three definitions.. */
-struct serv_addr4 {
+struct serv_local {
   u16 flags, domain_len;
   char *domain;
-  struct server *next;
+  struct serv_local *next;
+};
+
+struct serv_addr4 {
+  struct serv_local local;
   struct in_addr addr;
 };
 
 struct serv_addr6 {
-  u16 flags, domain_len;
-  char *domain;
-  struct server *next;
+  struct serv_local local;
   struct in6_addr addr;
-};
-
-struct serv_local {
-  u16 flags, domain_len;
-  char *domain;
-  struct server *next;
 };
 
 struct rebind_domain {
@@ -1115,7 +1114,8 @@ extern struct daemon {
   char *lease_change_command;
   struct iname *if_names, *if_addrs, *if_except, *dhcp_except, *auth_peers, *tftp_interfaces;
   struct bogus_addr *bogus_addr, *ignore_addr;
-  struct server *servers, *servers_tail, *local_domains, **serverarray;
+  struct server *servers, *servers_tail;
+  struct serv_local *local_domains, **serverarray;
   struct rebind_domain *no_rebind;
   int server_has_wildcard;
   int serverarraysz, serverarrayhwm;
