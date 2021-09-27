@@ -68,6 +68,68 @@ static int pxe_uefi_workaround(int pxe_arch, struct dhcp_netid *netid, struct dh
 static void apply_delay(u32 xid, time_t recvtime, struct dhcp_netid *netid);
 static int is_pxe_client(struct dhcp_packet *mess, size_t sz, const char **pxe_vendor);
 
+static int pxe_reply(struct dhcp_context *context, char *iface_name,
+		     size_t sz, struct pxe_service *service,
+		     struct dhcp_packet *mess, unsigned char *end, unsigned char *real_end,
+		     time_t now, unsigned char *opt, const char *pxevendor,
+		     struct dhcp_netid *tagif_netid, unsigned char *agent_id,
+		     unsigned char *emac, int emac_len)
+{
+  unsigned char save71[4];
+  unsigned char pxe_uuid[17];
+  struct dhcp_opt opt71;
+  unsigned char *uuid = NULL;
+  int layer = option_uint(opt, 2, 2);
+
+  if (layer & 0x8000)
+    {
+      my_syslog(MS_DHCP | LOG_ERR, _("PXE BIS not supported"));
+      return 0;
+    }
+
+  if ((opt = option_find(mess, sz, OPTION_PXE_UUID, 17)))
+    {
+      memcpy(pxe_uuid, option_ptr(opt, 0), 17);
+      uuid = pxe_uuid;
+    }
+
+  memcpy(save71, option_ptr(opt, 0), 4);
+  clear_packet(mess, end);
+
+  mess->yiaddr = mess->ciaddr;
+  mess->ciaddr.s_addr = 0;
+  if (service->sname)
+    mess->siaddr = a_record_from_hosts(service->sname, now);
+  else if (service->server.s_addr != 0)
+    mess->siaddr = service->server;
+  else
+    mess->siaddr = context->local;
+
+  if (strchr(service->basename, '.'))
+    snprintf((char *)mess->file, sizeof(mess->file),
+	"%s", service->basename);
+  else
+    snprintf((char *)mess->file, sizeof(mess->file),
+	"%s.%d", service->basename, layer);
+
+  option_put(mess, end, OPTION_MESSAGE_TYPE, 1, DHCPACK);
+  option_put(mess, end, OPTION_SERVER_IDENTIFIER, INADDRSZ, htonl(context->local.s_addr));
+  pxe_misc(mess, end, uuid, pxevendor);
+
+  prune_vendor_opts(tagif_netid);
+  opt71.val = save71;
+  opt71.opt = SUBOPT_PXE_BOOT_ITEM;
+  opt71.len = 4;
+  opt71.flags = DHOPT_VENDOR_MATCH;
+  opt71.netid = NULL;
+  opt71.next = daemon->dhcp_opts;
+  do_encap_opts(&opt71, OPTION_VENDOR_CLASS_OPT, DHOPT_VENDOR_MATCH, mess, end, 0);
+
+  log_packet("PXE", &mess->yiaddr, emac, emac_len, iface_name, (char *)mess->file, NULL, mess->xid);
+  log_tags(tagif_netid, ntohl(mess->xid));
+  return dhcp_packet_size(mess, agent_id, real_end);
+}
+
 size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		  size_t sz, time_t now, int unicast_dest, int loopback,
 		  int *is_inform, int pxe, struct in_addr fallback, time_t recvtime)
@@ -98,7 +160,6 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
   int vendor_class_len = 0, emac_len = 0;
   struct dhcp_netid known_id, iface_id, cpewan_id;
   struct dhcp_opt *o;
-  unsigned char pxe_uuid[17];
   unsigned char *oui = NULL, *serial = NULL;
 #ifdef HAVE_SCRIPT
   unsigned char *class = NULL;
@@ -860,11 +921,6 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
   if (daemon->enable_pxe &&
       is_pxe_client(mess, sz, &pxevendor))
     {
-      if ((opt = option_find(mess, sz, OPTION_PXE_UUID, 17)))
-	{
-	  memcpy(pxe_uuid, option_ptr(opt, 0), 17);
-	  uuid = pxe_uuid;
-	}
 
       /* Check if this is really a PXE bootserver request, and handle specially if so. */
       if ((mess_type == DHCPREQUEST || mess_type == DHCPINFORM) &&
@@ -872,10 +928,9 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	  (opt = option_find1(option_ptr(opt, 0), option_ptr(opt, option_len(opt)), SUBOPT_PXE_BOOT_ITEM, 4)))
 	{
 	  struct pxe_service *service;
+	  struct dhcp_context *pxe_context;
 	  int type = option_uint(opt, 0, 2);
 	  int layer = option_uint(opt, 2, 2);
-	  unsigned char save71[4];
-	  struct dhcp_opt opt71;
 
 	  if (ignore)
 	    return 0;
@@ -886,54 +941,18 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	      return 0;
 	    }
 
-	  memcpy(save71, option_ptr(opt, 0), 4);
-	  
 	  for (service = daemon->pxe_services; service; service = service->next)
-	    if (service->type == type)
+	    if (service->type == type && match_netid(service->netid, tagif_netid, 1))
 	      break;
 	  
-	  for (; context; context = context->current)
-	    if (match_netid(context->filter, tagif_netid, 1) &&
-		is_same_net(mess->ciaddr, context->start, context->netmask))
+	  for (pxe_context = context; pxe_context; pxe_context = pxe_context->current)
+	    if (match_netid(pxe_context->filter, tagif_netid, 1) &&
+		is_same_net(mess->ciaddr, pxe_context->start, pxe_context->netmask))
 	      break;
 	  
-	  if (!service || !service->basename || !context)
-	    return 0;
-	  	  
-	  clear_packet(mess, end);
-	  
-	  mess->yiaddr = mess->ciaddr;
-	  mess->ciaddr.s_addr = 0;
-	  if (service->sname)
-	    mess->siaddr = a_record_from_hosts(service->sname, now);
-	  else if (service->server.s_addr != 0)
-	    mess->siaddr = service->server; 
-	  else
-	    mess->siaddr = context->local; 
-	  
-	  if (strchr(service->basename, '.'))
-	    snprintf((char *)mess->file, sizeof(mess->file),
-		"%s", service->basename);
-	  else
-	    snprintf((char *)mess->file, sizeof(mess->file),
-		"%s.%d", service->basename, layer);
-	  
-	  option_put(mess, end, OPTION_MESSAGE_TYPE, 1, DHCPACK);
-	  option_put(mess, end, OPTION_SERVER_IDENTIFIER, INADDRSZ, htonl(context->local.s_addr));
-	  pxe_misc(mess, end, uuid, pxevendor);
-	  
-	  prune_vendor_opts(tagif_netid);
-	  opt71.val = save71;
-	  opt71.opt = SUBOPT_PXE_BOOT_ITEM;
-	  opt71.len = 4;
-	  opt71.flags = DHOPT_VENDOR_MATCH;
-	  opt71.netid = NULL;
-	  opt71.next = daemon->dhcp_opts;
-	  do_encap_opts(&opt71, OPTION_VENDOR_CLASS_OPT, DHOPT_VENDOR_MATCH, mess, end, 0);
-	  
-	  log_packet("PXE", &mess->yiaddr, emac, emac_len, iface_name, (char *)mess->file, NULL, mess->xid);
-	  log_tags(tagif_netid, ntohl(mess->xid));
-	  return dhcp_packet_size(mess, agent_id, real_end);	  
+	  if (service && service->basename && pxe_context)
+	    return pxe_reply(pxe_context, iface_name, sz, service, mess, end, real_end,
+			     now, opt, pxevendor, tagif_netid, agent_id, emac, emac_len);
 	}
       
       if ((opt = option_find(mess, sz, OPTION_ARCH, 2)))
