@@ -79,6 +79,36 @@ static struct pxe_service *pxe_service_find(int pxe_arch, struct dhcp_netid *net
   return NULL;
 }
 
+static void set_boot(struct dhcp_packet *mess, unsigned char *end,
+		     unsigned char *req_options, struct dhcp_boot *boot,
+		     time_t now)
+{
+  if (boot->sname)
+    {
+      if (!option_bool(OPT_NO_OVERRIDE) &&
+          req_options &&
+          in_list(req_options, OPTION_SNAME))
+        option_put_string(mess, end, OPTION_SNAME, boot->sname, 1);
+      else
+        safe_strncpy((char *)mess->sname, boot->sname, sizeof(mess->sname));
+    }
+
+  if (boot->file)
+    {
+      if (!option_bool(OPT_NO_OVERRIDE) &&
+          req_options &&
+          in_list(req_options, OPTION_FILENAME))
+        option_put_string(mess, end, OPTION_FILENAME, boot->file, 1);
+      else
+        safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
+    }
+
+  if (boot->next_server.s_addr)
+    mess->siaddr = boot->next_server;
+  else if (boot->tftp_sname)
+    mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
+}
+
 size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		  size_t sz, time_t now, int unicast_dest, int loopback,
 		  int *is_inform, int pxe, struct in_addr fallback, time_t recvtime)
@@ -1000,13 +1030,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		{
 		  /* Provide the bootfile here, for iPXE, and in case we have no menu items
 		      and set discovery_control = 8 */
-		      if (boot->next_server.s_addr) 
-			mess->siaddr = boot->next_server;
-		      else if (boot->tftp_sname) 
-			mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
-		      
-		      if (boot->file)
-			safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
+		      set_boot(mess, end, req_options, boot, now);
 		}
 
 	      option_put(mess, end, OPTION_MESSAGE_TYPE, 1,
@@ -2445,30 +2469,7 @@ static void do_options(struct dhcp_context *context,
      names, so we always send those.  */
   if ((boot = find_boot(tagif)))
     {
-      if (boot->sname)
-	{	  
-	  if (!option_bool(OPT_NO_OVERRIDE) &&
-	      req_options && 
-	      in_list(req_options, OPTION_SNAME))
-	    option_put_string(mess, end, OPTION_SNAME, boot->sname, 1);
-	  else
-	    safe_strncpy((char *)mess->sname, boot->sname, sizeof(mess->sname));
-	}
-      
-      if (boot->file)
-	{
-	  if (!option_bool(OPT_NO_OVERRIDE) &&
-	      req_options && 
-	      in_list(req_options, OPTION_FILENAME))
-	    option_put_string(mess, end, OPTION_FILENAME, boot->file, 1);
-	  else
-	    safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
-	}
-      
-      if (boot->next_server.s_addr) 
-	mess->siaddr = boot->next_server;
-      else if (boot->tftp_sname)
-	mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
+      set_boot(mess, end, req_options, boot, now);
     }
   else
     /* Use the values of the relevant options if no dhcp-boot given and
