@@ -72,22 +72,21 @@ static int filter_zone(struct auth_zone *zone, int flag, union all_addr *addr_u)
 int in_zone(struct auth_zone *zone, char *name, char **cut)
 {
   size_t namelen = strlen(name);
-  size_t domainlen = strlen(zone->domain);
 
   if (cut)
     *cut = NULL;
   
-  if (namelen >= domainlen && 
-      hostname_isequal(zone->domain, &name[namelen - domainlen]))
+  if (namelen >= zone->domain_len &&
+      hostname_isequal(zone->domain, &name[namelen - zone->domain_len]))
     {
-      
-      if (namelen == domainlen)
+
+      if (namelen == zone->domain_len)
 	return 1;
-      
-      if (name[namelen - domainlen - 1] == '.')
+
+      if (name[namelen - zone->domain_len - 1] == '.')
 	{
 	  if (cut)
-	    *cut = &name[namelen - domainlen - 1]; 
+	    *cut = &name[namelen - zone->domain_len - 1];
 	  return 1;
 	}
     }

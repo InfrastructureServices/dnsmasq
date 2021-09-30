@@ -411,6 +411,7 @@ struct addrlist {
 
 struct auth_zone {
   char *domain;
+  u16 domain_len;
   struct auth_name_list {
     char *name;
     int flags;
@@ -613,12 +614,14 @@ struct serv_local {
 
 struct rebind_domain {
   char *domain;
+  u16 domain_len;
   struct rebind_domain *next;
 };
 
 struct ipsets {
   char **sets;
   char *domain;
+  u16 domain_len;
   struct ipsets *next;
 };
 

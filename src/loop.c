@@ -30,7 +30,7 @@ void loop_send_probes()
    /* Loop through all upstream servers not for particular domains, and send a query to that server which is
       identifiable, via the uid. If we see that query back again, then the server is looping, and we should not use it. */
    for (serv = daemon->servers; serv; serv = serv->next)
-     if (strlen(serv->domain) == 0 &&
+     if (serv->domain_len == 0 &&
 	 !(serv->flags & (SERV_FOR_NODOTS)))
        {
 	 ssize_t len = loop_make_probe(serv->uid);
@@ -98,7 +98,7 @@ int detect_loop(char *query, int type)
   uid = strtol(query, NULL, 16);
 
   for (serv = daemon->servers; serv; serv = serv->next)
-    if (strlen(serv->domain) == 0 &&
+    if (serv->domain_len == 0 &&
 	!(serv->flags & SERV_LOOP) &&
 	uid == serv->uid)
       {

@@ -677,6 +677,13 @@ static char *canonicalise_opt(char *s)
   return ret;
 }
 
+static char *canonicalise_optlen(char *s, u16 *len)
+{
+  char *ret = canonicalise_opt(s);
+  *len = ret ? strlen(ret) : 0;
+  return ret;
+}
+
 static int numeric_check(char *a)
 {
   char *p;
@@ -2233,7 +2240,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	comma = split(arg);
 		
 	new = opt_malloc(sizeof(struct auth_zone));
-	new->domain = canonicalise_opt(arg);
+	new->domain = canonicalise_optlen(arg, &new->domain_len);
 	if (!new->domain)
 	  ret_err_free(_("invalid auth-zone"), new);
  	new->subnet = NULL;
@@ -2728,7 +2735,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	do {
 	  comma = split_chr(arg, '/');
 	  new = opt_malloc(sizeof(struct  rebind_domain));
-	  new->domain = canonicalise_opt(arg);
+	  new->domain = canonicalise_optlen(arg, &new->domain_len);
 	  new->next = daemon->no_rebind;
 	  daemon->no_rebind = new;
 	  arg = comma;
@@ -2897,6 +2904,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 		 ipsets = ipsets->next;
 		 memset(ipsets, 0, sizeof(struct ipsets));
 		 ipsets->domain = domain;
+		 ipsets->domain_len = strlen(domain);
 		 arg = end;
 	       }
 	   } 
@@ -2906,6 +2914,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	     ipsets = ipsets->next;
 	     memset(ipsets, 0, sizeof(struct ipsets));
 	     ipsets->domain = "";
+	     ipsets->domain_len = 0;
 	   }
 	 
 	 if (!arg || !*arg)

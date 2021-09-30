@@ -1532,7 +1532,7 @@ void check_servers(int no_loop_check)
 	  
 	  /* Disable DNSSEC validation when using server=/domain/.... servers
 	     unless there's a configured trust anchor. */
-	  if (strlen(serv->domain) != 0)
+	  if (serv->domain_len != 0)
 	    {
 	      struct ds_config *ds;
 	      char *domain = serv->domain;
@@ -1592,7 +1592,7 @@ void check_servers(int no_loop_check)
       if (++count > SERVERS_LOGGED)
 	continue;
       
-      if (strlen(serv->domain) != 0 || (serv->flags & SERV_FOR_NODOTS))
+      if (serv->domain_len != 0 || (serv->flags & SERV_FOR_NODOTS))
 	{
 	  char *s1, *s2, *s3 = "", *s4 = "";
 
@@ -1602,7 +1602,7 @@ void check_servers(int no_loop_check)
 #endif
 	  if (serv->flags & SERV_FOR_NODOTS)
 	    s1 = _("unqualified"), s2 = _("names");
-	  else if (strlen(serv->domain) == 0)
+	  else if (serv->domain_len == 0)
 	    s1 = _("default"), s2 = "";
 	  else
 	    s1 = _("domain"), s2 = serv->domain, s4 = (serv->flags & SERV_WILDCARD) ? "*" : "";

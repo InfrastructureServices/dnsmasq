@@ -152,10 +152,10 @@ static void server_send_log(struct server *server, int fd,
 static int domain_no_rebind(char *domain)
 {
   struct rebind_domain *rbd;
-  size_t tlen, dlen = strlen(domain);
+  u16 dlen = strlen(domain);
   
   for (rbd = daemon->no_rebind; rbd; rbd = rbd->next)
-    if (dlen >= (tlen = strlen(rbd->domain)) && strcmp(rbd->domain, &domain[dlen - tlen]) == 0)
+    if (dlen >= rbd->domain_len && strcmp(rbd->domain, &domain[dlen - rbd->domain_len]) == 0)
       return 1;
 
   return 0;
@@ -575,7 +575,7 @@ static struct ipsets *domain_find_sets(struct ipsets *setlist, const char *domai
   unsigned int matchlen = 0;
   for (ipset_pos = setlist; ipset_pos; ipset_pos = ipset_pos->next) 
     {
-      unsigned int domainlen = strlen(ipset_pos->domain);
+      unsigned int domainlen = ipset_pos->domain_len;
       const char *matchstart = domain + namelen - domainlen;
       if (namelen >= domainlen && hostname_isequal(matchstart, ipset_pos->domain) &&
           (domainlen == 0 || namelen == domainlen || *(matchstart - 1) == '.' ) &&
