@@ -268,6 +268,22 @@ int server_samegroup(struct server *a, struct server *b)
   return order_servers((struct serv_local *)a, (struct serv_local *)b) == 0;
 }
 
+/* Find row of servers matching the flag, return 1 if at least one found. */
+static int adjust_bounds(int *nlow, int *nhigh, int flag, int cond)
+{
+  int i;
+
+  for (i = *nlow; i < *nhigh && (daemon->serverarray[i]->flags & flag); i++);
+
+  if (i != *nlow && cond)
+    {
+      *nhigh = i;
+      return 1;
+    }
+  *nlow = i;
+  return 0;
+}
+
 int filter_servers(int seed, int flags, int *lowout, int *highout)
 {
   int nlow = seed, nhigh = seed;
@@ -304,36 +320,10 @@ int filter_servers(int seed, int flags, int *lowout, int *highout)
 	 
 	 See which of those match our query in that priority order and narrow (low, high) */
       
-      for (i = nlow; i < nhigh && (daemon->serverarray[i]->flags & SERV_6ADDR); i++);
-      
-      if (i != nlow && (flags & F_IPV6))
-	nhigh = i;
-      else
-	{
-	  nlow = i;
-	  
-	  for (i = nlow; i < nhigh && (daemon->serverarray[i]->flags & SERV_4ADDR); i++);
-	  
-	  if (i != nlow && (flags & F_IPV4))
-	    nhigh = i;
-	  else
-	    {
-	      nlow = i;
-	      
-	      for (i = nlow; i < nhigh && (daemon->serverarray[i]->flags & SERV_ALL_ZEROS); i++);
-	      
-	      if (i != nlow && (flags & (F_IPV4 | F_IPV6)))
-		nhigh = i;
-	      else
-		{
-		  nlow = i;
-		  
-		  /* Short to resolv.conf servers */
-		  for (i = nlow; i < nhigh && (daemon->serverarray[i]->flags & SERV_USE_RESOLV); i++);
-		  
-		  if (i != nlow)
-		    nhigh = i;
-		  else
+      if (!adjust_bounds(&nlow, &nhigh, SERV_6ADDR, (flags & F_IPV6)) &&
+	  !adjust_bounds(&nlow, &nhigh, SERV_4ADDR, (flags & F_IPV4)) &&
+	  !adjust_bounds(&nlow, &nhigh, SERV_ALL_ZEROS, (flags & (F_IPV4 | F_IPV6))) &&
+	  !adjust_bounds(&nlow, &nhigh, SERV_USE_RESOLV, 1))/* Short to resolv.conf servers */
 		    {
 		      /* now look for a server */
 		      for (i = nlow; i < nhigh && !(daemon->serverarray[i]->flags & SERV_LITERAL_ADDRESS); i++);
@@ -357,9 +347,6 @@ int filter_servers(int seed, int flags, int *lowout, int *highout)
 			    nhigh = i;
 			}
 		    }
-		}
-	    }
-	}
     }
 
   *lowout = nlow;
