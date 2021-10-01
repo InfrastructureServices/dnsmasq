@@ -2754,6 +2754,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	union all_addr addr;
 	union mysockaddr serv_addr, source_addr;
 	char interface[IF_NAMESIZE+1];
+	int add_local = 0;
 
 	unhide_metas(arg);
 	
@@ -2775,6 +2776,8 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	  flags = SERV_LITERAL_ADDRESS;
 	else if (option == 'A')
 	  {
+	    char *comma = split(arg);
+	    add_local = 1;
 	    /* # as literal address means return zero address for 4 and 6 */
 	    if (strcmp(arg, "#") == 0)
 	      flags = SERV_ALL_ZEROS | SERV_LITERAL_ADDRESS;
@@ -2784,6 +2787,13 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	      flags = SERV_6ADDR | SERV_LITERAL_ADDRESS;
 	    else
 	      ret_err(_("Bad address in --address"));
+	    if (comma)
+	      {
+		if (strcmp(comma, "only") == 0)
+		  add_local = 0;
+		else
+		  ret_err(_("Unknown address qualifier"));
+	      }
 	  }
 	else
 	  {
@@ -2811,6 +2821,14 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	    
 	    if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, &addr))
 	      ret_err(gen_err);
+	    if (add_local)
+	      {
+		/* without --address=/example.com/,only add also --local=/example.com/ to keep
+		 * previous behaviour. */
+		int local_flags = flags & ~(SERV_ALL_ZEROS|SERV_4ADDR|SERV_6ADDR);
+		if (!add_update_server(local_flags, &serv_addr, &source_addr, interface, domain, &addr))
+		  ret_err(gen_err);
+	      }
 	    
 	    if (!lastdomain || domain == lastdomain)
 	      break;
