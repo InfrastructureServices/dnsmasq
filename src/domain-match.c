@@ -401,7 +401,8 @@ size_t make_local_answer(int flags, int gotname, size_t size, struct dns_header 
 	  
   if (!(p = skip_questions(header, size)))
     return 0;
-	  
+  header->ancount = ntohs(header->ancount);
+
   if (flags & gotname & F_IPV4)
     for (start = first; start != last; start++)
       {
@@ -415,7 +416,7 @@ size_t make_local_answer(int flags, int gotname, size_t size, struct dns_header 
 	
 	if (add_resource_record(header, limit, &trunc, sizeof(struct dns_header), &p, daemon->local_ttl, NULL, T_A, C_IN, "4", &addr))
 	  anscount++;
-	log_query((flags | F_CONFIG | F_FORWARD) & ~F_IPV6, name, (union all_addr *)&addr, NULL, 0);
+	log_query((flags | F_CONFIG | F_FORWARD) & ~F_IPV6, name, &addr, NULL, 0);
       }
   
   if (flags & gotname & F_IPV6)
@@ -431,7 +432,7 @@ size_t make_local_answer(int flags, int gotname, size_t size, struct dns_header 
 
 	if (add_resource_record(header, limit, &trunc, sizeof(struct dns_header), &p, daemon->local_ttl, NULL, T_AAAA, C_IN, "6", &addr))
 	  anscount++;
-	log_query((flags | F_CONFIG | F_FORWARD) & ~F_IPV4, name, (union all_addr *)&addr, NULL, 0);
+	log_query((flags | F_CONFIG | F_FORWARD) & ~F_IPV4, name, &addr, NULL, 0);
       }
 
   if (trunc)
