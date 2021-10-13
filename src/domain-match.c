@@ -28,7 +28,7 @@ static struct server *server_from_local(struct serv_local *sl)
   return NULL;
 }
 
-void build_server_array(void)
+static void build_server_array(void)
 {
   struct server *serv;
   struct serv_local *sl;
@@ -598,6 +598,12 @@ void cleanup_servers(void)
       else 
 	upl = &sl->next;
    }
+
+  /* If we're delaying things, we don't call check_servers(), but
+     reload_servers() may have deleted some servers, rendering the server_array
+     invalid, so just rebuild that here. Once reload_servers() succeeds,
+     we call check_servers() above, which calls build_server_array itself. */
+  build_server_array();
 }
 
 int add_update_server(int flags,

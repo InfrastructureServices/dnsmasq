@@ -1658,7 +1658,6 @@ void check_servers(int no_loop_check)
     }
   
   cleanup_servers(); /* remove servers we just deleted. */
-  build_server_array(); 
 }
 
 /* Return zero if no servers found, in that case we keep polling.

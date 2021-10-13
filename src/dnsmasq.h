@@ -1780,7 +1780,6 @@ void dump_packet(int mask, void *packet, size_t len, union mysockaddr *src, unio
 #endif
 
 /* domain-match.c */
-void build_server_array(void);
 int lookup_domain(char *qdomain, int flags, int *lowout, int *highout);
 int filter_servers(int seed, int flags, int *lowout, int *highout);
 int is_local_answer(time_t now, int first, char *name);
