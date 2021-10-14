@@ -496,7 +496,7 @@ static int order(char *qdomain, size_t qlen, struct serv_local *serv)
   if (qlen > dlen)
     return -1;
 
-  return strcmp(qdomain, serv->domain);
+  return strcasecmp(qdomain, serv->domain);
 }
 
 static int order_servers(struct serv_local *s1, struct serv_local *s2)
