@@ -647,10 +647,10 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	  struct name_list *secondary;
 	  
 	  /* Only include the machine running dnsmasq if it's acting as an auth server */
-	  if (daemon->authinterface)
+	  if (daemon->authserver)
 	    {
 	      newoffset = ansp - (unsigned char *)header;
-	      if (add_resource_record(header, limit, &trunc, -offset, &ansp, 
+	      if (add_resource_record(header, limit, &trunc, -offset, &ansp,
 				      daemon->auth_ttl, NULL, T_NS, C_IN, "d", offset == 0 ? authname : NULL, daemon->authserver))
 		{
 		  if (offset == 0) 
