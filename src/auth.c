@@ -17,6 +17,7 @@
 #include "dnsmasq.h"
 
 #ifdef HAVE_AUTH
+#define QTYPE_OR_ANY(qtype,t) (qtype == (t) || qtype == T_ANY)
 
 static struct addrlist *find_addrlist(struct addrlist *list, int flag, union all_addr *addr_u)
 {
@@ -296,7 +297,7 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	  {
 	    nxdomain = 0;
 	         
-	    if (rc == 2 && qtype == T_MX)
+	    if (rc == 2 && QTYPE_OR_ANY(qtype, T_MX))
 	      {
 		found = 1;
 		log_query(F_CONFIG | F_RRNAME, name, NULL, "<MX>", 0);
@@ -311,7 +312,7 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	  {
 	    nxdomain = 0;
 	    
-	    if (rc == 2 && qtype == T_SRV)
+	    if (rc == 2 && QTYPE_OR_ANY(qtype, T_SRV))
 	      {
 		found = 1;
 		log_query(F_CONFIG | F_RRNAME, name, NULL, "<SRV>", 0);
@@ -345,7 +346,7 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	if ((rc = hostname_issubdomain(name, txt->name)))
 	  {
 	    nxdomain = 0;
-	    if (rc == 2 && txt->class == qtype)
+	    if (rc == 2 && (txt->class == qtype || qtype == T_ANY))
 	      {
 		found = 1;
 		log_query(F_CONFIG | F_RRNAME, name, NULL, NULL, txt->class);
@@ -359,7 +360,7 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	if (txt->class == C_IN && (rc = hostname_issubdomain(name, txt->name)))
 	  {
 	    nxdomain = 0;
-	    if (rc == 2 && qtype == T_TXT)
+	    if (rc == 2 && QTYPE_OR_ANY(qtype, T_TXT))
 	      {
 		found = 1;
 		log_query(F_CONFIG | F_RRNAME, name, NULL, "<TXT>", 0);
@@ -373,7 +374,7 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	 if ((rc = hostname_issubdomain(name, na->name)))
 	   {
 	     nxdomain = 0;
-	     if (rc == 2 && qtype == T_NAPTR)
+	     if (rc == 2 && QTYPE_OR_ANY(qtype, T_NAPTR))
 	       {
 		 found = 1;
 		 log_query(F_CONFIG | F_RRNAME, name, NULL, "<NAPTR>", 0);
@@ -383,33 +384,38 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 			  anscount++;
 	       }
 	   }
-    
-       if (qtype == T_A)
-	 flag = F_IPV4;
-       
-       if (qtype == T_AAAA)
-	 flag = F_IPV6;
+
+       if (!flag)
+	{
+	  if (qtype == T_A)
+	    flag = F_IPV4;
+	  else if (qtype == T_AAAA)
+	    flag = F_IPV6;
+	  else if (qtype == T_ANY)
+	    flag = F_IPV4 | F_IPV6;
+	}
        
        for (intr = daemon->int_names; intr; intr = intr->next)
 	 if ((rc = hostname_issubdomain(name, intr->name)))
 	   {
 	     struct addrlist *addrlist;
-	     
+	     int al6;
+
 	     nxdomain = 0;
-	     
+
 	     if (rc == 2 && flag)
-	       for (addrlist = intr->addr; addrlist; addrlist = addrlist->next)  
-		 if (((addrlist->flags & ADDRLIST_IPV6)  ? T_AAAA : T_A) == qtype &&
+	       for (addrlist = intr->addr; addrlist; addrlist = addrlist->next)
+		 if ((( (al6=(addrlist->flags & ADDRLIST_IPV6)) && (flag & F_IPV6)) ||
+		       (!al6 && (flag & F_IPV4))) &&
+		      !(addrlist->flags & ADDRLIST_REVONLY) &&
 		     (local_query || filter_zone(zone, flag, &addrlist->addr)))
 		   {
-		     if (addrlist->flags & ADDRLIST_REVONLY)
-		       continue;
-
 		     found = 1;
 		     log_query(F_FORWARD | F_CONFIG | flag, name, &addrlist->addr, NULL, 0);
 		     if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
-					     daemon->auth_ttl, NULL, qtype, C_IN, 
-					     qtype == T_A ? "4" : "6", &addrlist->addr))
+					     daemon->auth_ttl, NULL,
+					     al6 ? T_AAAA : T_A, C_IN, al6 ? "6" : "4",
+					     &addrlist->addr))
 		       anscount++;
 		   }
 	     }
@@ -420,7 +426,9 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	   
 	   log_query(F_FORWARD | F_CONFIG | flag, name, &addr, NULL, 0);
 	   if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
-				   daemon->auth_ttl, NULL, qtype, C_IN, qtype == T_A ? "4" : "6", &addr))
+				   daemon->auth_ttl, NULL,
+				   (flag == F_IPV6) ? T_AAAA : T_A, C_IN,
+				   (flag == F_IPV6) ? "6" : "4", &addr))
 	     anscount++;
 	 }
        
@@ -483,19 +491,22 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
 	  
 	  if (!strchr(name, '.') && (crecp = cache_find_by_name(NULL, name, now, F_IPV4 | F_IPV6)))
 	    {
+	      unsigned int addrf;
 	      if (crecp->flags & F_DHCP)
 		do
 		  { 
 		    nxdomain = 0;
-		    if ((crecp->flags & flag) && 
+		    addrf = (crecp->flags & flag);
+		    if (addrf &&
 			(local_query || filter_zone(zone, flag, &(crecp->addr))))
 		      {
 			*cut = '.'; /* restore domain part */
 			log_query(crecp->flags, name, &crecp->addr, record_source(crecp->uid), 0);
 			*cut  = 0; /* remove domain part */
 			if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
-						daemon->auth_ttl, NULL, qtype, C_IN, 
-						qtype == T_A ? "4" : "6", &crecp->addr))
+						daemon->auth_ttl, NULL,
+						addrf == F_IPV6 ? T_AAAA : T_A, C_IN,
+						addrf == F_IPV6 ? "6" : "4", &crecp->addr))
 			  anscount++;
 		      }
 		  } while ((crecp = cache_find_by_name(crecp, name, now,  F_IPV4 | F_IPV6)));
@@ -506,16 +517,19 @@ size_t answer_auth(struct dns_header *header, char *limit, size_t qlen, time_t n
       
       if ((crecp = cache_find_by_name(NULL, name, now, F_IPV4 | F_IPV6)))
 	{
+	  unsigned int addrf;
 	  if ((crecp->flags & F_HOSTS) || (((crecp->flags & F_DHCP) && option_bool(OPT_DHCP_FQDN))))
 	    do
 	      { 
 		 nxdomain = 0;
-		 if ((crecp->flags & flag) && (local_query || filter_zone(zone, flag, &(crecp->addr))))
+		 addrf = (crecp->flags & flag);
+		 if (addrf && (local_query || filter_zone(zone, flag, &(crecp->addr))))
 		   {
 		     log_query(crecp->flags, name, &crecp->addr, record_source(crecp->uid), 0);
 		     if (add_resource_record(header, limit, &trunc, nameoffset, &ansp, 
-					     daemon->auth_ttl, NULL, qtype, C_IN, 
-					     qtype == T_A ? "4" : "6", &crecp->addr))
+					     daemon->auth_ttl, NULL,
+					     addrf == F_IPV6 ? T_AAAA : T_A, C_IN,
+					     addrf == F_IPV6 ? "6" : "4", &crecp->addr))
 		       anscount++;
 		   }
 	      } while ((crecp = cache_find_by_name(crecp, name, now, F_IPV4 | F_IPV6)));
