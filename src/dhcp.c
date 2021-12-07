@@ -715,6 +715,21 @@ struct dhcp_config *config_find_by_address(struct dhcp_config *configs, struct i
   return NULL;
 }
 
+unsigned int ping_hash(unsigned char *hwaddr, int hw_len)
+{
+  int i;
+  unsigned int j = 0;
+  /* hash hwaddr: use the SDBM hashing algorithm.  Seems to give good
+     dispersal even with similarly-valued "strings". */
+  for (i = 0; i < hw_len; i++)
+    j = hwaddr[i] + (j << 6) + (j << 16) - j;
+
+  /* j == 0 is marker */
+  if (j == 0)
+    j = 1;
+  return j;
+}
+
 /* Check if and address is in use by sending ICMP ping.
    This wrapper handles a cache and load-limiting.
    Return is NULL is address in use, or a pointer to a cache entry
@@ -785,18 +800,11 @@ int address_allocate(struct dhcp_context *context,
 
   struct in_addr start, addr;
   struct dhcp_context *c, *d;
-  int i, pass;
+  int pass;
   unsigned int j; 
 
-  /* hash hwaddr: use the SDBM hashing algorithm.  Seems to give good
-     dispersal even with similarly-valued "strings". */ 
-  for (j = 0, i = 0; i < hw_len; i++)
-    j = hwaddr[i] + (j << 6) + (j << 16) - j;
+  j = ping_hash(hwaddr, hw_len);
 
-  /* j == 0 is marker */
-  if (j == 0)
-    j = 1;
-  
   for (pass = 0; pass <= 1; pass++)
     for (c = context; c; c = c->current)
       if (c->flags & (CONTEXT_STATIC | CONTEXT_PROXY))
