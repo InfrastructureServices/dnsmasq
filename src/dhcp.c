@@ -734,9 +734,8 @@ unsigned int ping_hash(unsigned char *hwaddr, int hw_len)
    This wrapper handles a cache and load-limiting.
    Return is NULL is address in use, or a pointer to a cache entry
    recording that it isn't. */
-struct ping_result *do_icmp_ping(time_t now, struct in_addr addr, unsigned int hash, int loopback)
+int do_icmp_ping(time_t now, struct in_addr addr, unsigned int hash, int loopback)
 {
-  static struct ping_result dummy;
   struct ping_result *r, *victim = NULL;
   int count, max = (int)(0.6 * (((float)PING_CACHE_TIME)/
 				((float)PING_WAIT)));
@@ -754,19 +753,14 @@ struct ping_result *do_icmp_ping(time_t now, struct in_addr addr, unsigned int h
       {
 	count++;
 	if (r->addr.s_addr == addr.s_addr)
-	  return r;
+	  return (1 + (hash == r->hash));
       }
   
   /* didn't find cached entry */
   if ((count >= max) || option_bool(OPT_NO_PING) || loopback)
-    {
       /* overloaded, or configured not to check, loopback interface, return "not in use" */
-      dummy.hash = hash;
-      return &dummy;
-    }
-  else if (icmp_ping(addr))
-    return NULL; /* address in use. */
-  else
+    return 2;
+  else if (!icmp_ping(addr))
     {
       /* at this point victim may hold an expired record */
       if (!victim)
@@ -785,9 +779,10 @@ struct ping_result *do_icmp_ping(time_t now, struct in_addr addr, unsigned int h
 	  victim->addr = addr;
 	  victim->time = now;
 	  victim->hash = hash;
+	  return 2;
 	}
-      return victim;
     }
+  return 0; /* address in use or no memory. */
 }
 
 int address_allocate(struct dhcp_context *context,
@@ -849,13 +844,13 @@ int address_allocate(struct dhcp_context *context,
 		  c->addr_epoch--;
 		else
 		  {
-		    struct ping_result *r;
+		    int r = do_icmp_ping(now, addr, j, loopback);
 		    
-		    if ((r = do_icmp_ping(now, addr, j, loopback)))
+		    if (r)
 		      {
 			/* consec-ip mode: we offered this address for another client
 			   (different hash) recently, don't offer it to this one. */
-			if (!option_bool(OPT_CONSEC_ADDR) || r->hash == j)
+			if (!option_bool(OPT_CONSEC_ADDR) || r > 1)
 			  {
 			    *addrp = addr;
 			    return 1;
@@ -870,12 +865,12 @@ int address_allocate(struct dhcp_context *context,
 		      }
 		  }
 	      }
-	    
-	    addr.s_addr = htonl(ntohl(addr.s_addr) + 1);
-	    
-	    if (addr.s_addr == htonl(ntohl(c->end.s_addr) + 1))
+
+	    if (addr.s_addr == c->end.s_addr)
 	      addr = c->start;
-	    
+	    else
+	      addr.s_addr = htonl(ntohl(addr.s_addr) + 1);
+
 	  } while (addr.s_addr != start.s_addr);
 	}
 

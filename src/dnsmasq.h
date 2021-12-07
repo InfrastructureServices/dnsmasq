@@ -1500,8 +1500,8 @@ struct dhcp_context *narrow_context(struct dhcp_context *context,
 				    struct in_addr taddr,
 				    struct dhcp_netid *netids);
 unsigned int ping_hash(unsigned char *hwaddr, int hw_len);
-struct ping_result *do_icmp_ping(time_t now, struct in_addr addr,
-				 unsigned int hash, int loopback);
+int do_icmp_ping(time_t now, struct in_addr addr,
+		 unsigned int hash, int loopback);
 int address_allocate(struct dhcp_context *context,
 		     struct in_addr *addrp, unsigned char *hwaddr, int hw_len,
 		     struct dhcp_netid *netids, time_t now, int loopback);
