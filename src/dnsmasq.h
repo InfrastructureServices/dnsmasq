@@ -795,6 +795,7 @@ struct frec {
 #define LEASE_TA            64  /* IPv6 temporary lease */
 #define LEASE_HAVE_HWADDR  128  /* Have set hwaddress */
 #define LEASE_EXP_CHANGED  256  /* Lease expiry time changed */
+#define LEASE_TEMP       0x200  /* Lease contains just DISCOVER reservation */
 
 struct dhcp_lease {
   int clid_len;          /* length of client identifier */
@@ -1515,7 +1516,7 @@ char *host_from_dns(struct in_addr addr);
 void lease_update_file(time_t now);
 void lease_update_dns(int force);
 void lease_init(time_t now);
-struct dhcp_lease *lease4_allocate(struct in_addr addr);
+struct dhcp_lease *lease4_allocate(struct in_addr addr, int temp);
 #ifdef HAVE_DHCP6
 struct dhcp_lease *lease6_allocate(struct in6_addr *addrp, int lease_type);
 struct dhcp_lease *lease6_find(unsigned char *clid, int clid_len, 

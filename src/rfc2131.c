@@ -68,6 +68,22 @@ static int pxe_uefi_workaround(int pxe_arch, struct dhcp_netid *netid, struct dh
 static void apply_delay(u32 xid, time_t recvtime, struct dhcp_netid *netid);
 static int is_pxe_client(struct dhcp_packet *mess, size_t sz, const char **pxe_vendor);
 
+static struct dhcp_lease *temp_lease4_allocate(struct dhcp_context *context,
+		     struct dhcp_packet *mess, unsigned char *hwaddr, int hw_len,
+		     struct dhcp_netid *netids, time_t now, int loopback)
+{
+  struct dhcp_lease *lease;
+  if (!address_allocate(context, &mess->yiaddr, hwaddr, hw_len, netids, now, loopback))
+    return NULL;
+  lease = lease4_allocate(mess->yiaddr, 1);
+  if (lease)
+    {
+      lease_set_hwaddr(lease, mess->chaddr, NULL, mess->hlen, mess->htype, 0, now, 0);
+      lease_set_expires(lease, PING_CACHE_TIME, now);
+    }
+  return lease;
+}
+
 size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		  size_t sz, time_t now, int unicast_dest, int loopback,
 		  int *is_inform, int pxe, struct in_addr fallback, time_t recvtime)
@@ -623,7 +639,8 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		       lease_prune(lease, now);
 		       lease = NULL;
 		     }
-		   if (!address_allocate(context, &mess->yiaddr, mess->chaddr, mess->hlen, tagif_netid, now, loopback))
+		   if (!address_allocate(context, &mess->yiaddr, mess->chaddr,
+					 mess->hlen, tagif_netid, now, loopback))
 		     message = _("no address available");
 		}
 	      else
@@ -651,7 +668,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 
 	  if (!message && 
 	      !lease && 
-	      (!(lease = lease4_allocate(mess->yiaddr))))
+	      (!(lease = lease4_allocate(mess->yiaddr, 0))))
 	    message = _("no leases left");
 	  
 	  if (!message)
@@ -662,7 +679,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	      if (hostname)
 		lease_set_hostname(lease, hostname, 1, get_domain(lease->addr), domain); 
 	      /* infinite lease unless nailed in dhcp-host line. */
-	      lease_set_expires(lease,  
+	      lease_set_expires(lease,
 				have_config(config, CONFIG_TIME) ? config->lease_time : 0xffffffff, 
 				now); 
 	      lease_set_interface(lease, int_index, now);
@@ -1138,8 +1155,8 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	    mess->yiaddr = addr;
 	  else if (emac_len == 0)
 	    message = _("no unique-id");
-	  else if (!address_allocate(context, &mess->yiaddr, emac, emac_len, tagif_netid, now, loopback))
-	    message = _("no address available");      
+	  else if (!temp_lease4_allocate(context, mess, emac, emac_len, tagif_netid, now, loopback))
+	    message = _("no address available");
 	}
       
       daemon->metrics[METRIC_DHCPDISCOVER]++;
@@ -1341,7 +1358,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	      
 	      else if (!lease)
 		{	     
-		  if ((lease = lease4_allocate(mess->yiaddr)))
+		  if ((lease = lease4_allocate(mess->yiaddr, 0)))
 		    do_classes = 1;
 		  else
 		    message = _("no leases left");
@@ -1472,6 +1489,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	    }
 	  
 	  time = calc_time(context, config, option_find(mess, sz, OPTION_LEASE_TIME, 4));
+	  lease->flags &= ~LEASE_TEMP;
 	  lease_set_hwaddr(lease, mess->chaddr, clid, mess->hlen, mess->htype, clid_len, now, do_classes);
 	  
 	  /* if all the netids in the ignore_name list are present, ignore client-supplied name */

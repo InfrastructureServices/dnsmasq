@@ -537,7 +537,7 @@ static DBusMessage *dbus_add_lease(DBusMessage* message)
 				      "ia_id and is_temporary must be zero for IPv4 lease");
       
       if (!(lease = lease_find_by_addr(addr.addr4)))
-    	lease = lease4_allocate(addr.addr4);
+    	lease = lease4_allocate(addr.addr4, 0);
     }
 #ifdef HAVE_DHCP6
   else if (inet_pton(AF_INET6, ipaddr, &addr.addr6))

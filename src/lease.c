@@ -69,7 +69,7 @@ static int read_leases(time_t now, FILE *leasestream)
 		
 	if (inet_pton(AF_INET, daemon->namebuff, &addr.addr4))
 	  {
-	    if ((lease = lease4_allocate(addr.addr4)))
+	    if ((lease = lease4_allocate(addr.addr4, 0)))
 	      domain = get_domain(lease->addr);
 	    
 	    hw_len = parse_hex(daemon->dhcp_buff2, (unsigned char *)daemon->dhcp_buff2, DHCP_CHADDR_MAX, NULL, &hw_type);
@@ -264,6 +264,8 @@ void lease_update_file(time_t now)
       for (lease = leases; lease; lease = lease->next)
 	{
 
+	  if (lease->flags & LEASE_TEMP)
+	    continue;
 #ifdef HAVE_DHCP6
 	  if (lease->flags & (LEASE_TA | LEASE_NA))
 	    continue;
@@ -760,7 +762,7 @@ struct in_addr lease_find_max_addr(struct dhcp_context *context)
   return addr;
 }
 
-static struct dhcp_lease *lease_allocate(void)
+static struct dhcp_lease *lease_allocate(int temp)
 {
   struct dhcp_lease *lease;
   if (!leases_left || !(lease = whine_malloc(sizeof(struct dhcp_lease))))
@@ -775,16 +777,22 @@ static struct dhcp_lease *lease_allocate(void)
   lease->hwaddr_len = 256; /* illegal value */
   lease->next = leases;
   leases = lease;
-  
-  file_dirty = 1;
   leases_left--;
+  if (!temp)
+    {
+      file_dirty = 1;
+    }
+  else
+    {
+      lease->flags |= LEASE_TEMP;
+    }
 
   return lease;
 }
 
-struct dhcp_lease *lease4_allocate(struct in_addr addr)
+struct dhcp_lease *lease4_allocate(struct in_addr addr, int temp)
 {
-  struct dhcp_lease *lease = lease_allocate();
+  struct dhcp_lease *lease = lease_allocate(temp);
   if (lease)
     {
       lease->addr = addr;
@@ -797,7 +805,7 @@ struct dhcp_lease *lease4_allocate(struct in_addr addr)
 #ifdef HAVE_DHCP6
 struct dhcp_lease *lease6_allocate(struct in6_addr *addrp, int lease_type)
 {
-  struct dhcp_lease *lease = lease_allocate();
+  struct dhcp_lease *lease = lease_allocate(0);
 
   if (lease)
     {
@@ -883,7 +891,8 @@ void lease_set_hwaddr(struct dhcp_lease *lease, const unsigned char *hwaddr,
       lease->hwaddr_len = hw_len;
       lease->hwaddr_type = hw_type;
       lease->flags |= LEASE_CHANGED;
-      file_dirty = 1; /* run script on change */
+      if ((lease->flags & LEASE_TEMP) != 0)
+	file_dirty = 1; /* run script on change */
     }
 
   /* only update clid when one is available, stops packets
