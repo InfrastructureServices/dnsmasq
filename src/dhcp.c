@@ -785,96 +785,157 @@ int do_icmp_ping(time_t now, struct in_addr addr, unsigned int hash, int loopbac
   return 0; /* address in use or no memory. */
 }
 
+static struct in_addr dhcp_context_start_addr(struct dhcp_context *c, unsigned int hash)
+{
+  struct in_addr start;
+  if (option_bool(OPT_CONSEC_ADDR))
+    /* seed is largest extant lease addr in this context */
+    start = lease_find_max_addr(c);
+  else
+    /* pick a seed based on hwaddr */
+    start.s_addr = htonl(ntohl(c->start.s_addr) +
+			  ((hash + c->addr_epoch) % (1 + ntohl(c->end.s_addr) - ntohl(c->start.s_addr))));
+  return start;
+}
+
+static int dhcp_context_my_addr(const struct dhcp_context *context, struct in_addr addr)
+{
+  const struct dhcp_context *d;
+
+  /* eliminate addresses in use by the server. */
+  for (d = context; d; d = d->current)
+    if (addr.s_addr == d->router.s_addr)
+      return 1;
+  return 0;
+}
+
+static struct in_addr dhcp_context_next_addr(const struct dhcp_context *c,
+					     struct in_addr addr)
+{
+  if (addr.s_addr == c->end.s_addr)
+    addr = c->start;
+  else
+    addr.s_addr = htonl(ntohl(addr.s_addr) + 1);
+  return addr;
+}
+
+/* Addresses which end in .255 and .0 are broken in Windows even when using
+   supernetting. ie dhcp-range=192.168.0.1,192.168.1.254,255,255,254.0
+   then 192.168.0.255 is a valid IP address, but not for Windows as it's
+   in the class C range. See  KB281579. We therefore don't allocate these
+   addresses to avoid hard-to-diagnose problems. Thanks Bill. */
+static int bug_kb281579(struct in_addr addr)
+{
+  unsigned int h;
+  return (IN_CLASSC(ntohl(addr.s_addr)) &&
+	  ((h=ntohl(addr.s_addr) & 0xff) == 0xff || h == 0x0));
+}
+
+static int address_free(struct dhcp_context *c,
+		     struct in_addr addr, unsigned int j,
+		     time_t now, int loopback)
+{
+  if (	!lease_find_by_addr(addr) &&
+	!config_find_by_address(daemon->dhcp_conf, addr) &&
+	!bug_kb281579(addr))
+      {
+	/* in consec-ip mode, skip addresses equal to
+	   the number of addresses rejected by clients. This
+	   should avoid the same client being offered the same
+	   address after it has rjected it. */
+	if (option_bool(OPT_CONSEC_ADDR) && c->addr_epoch)
+	  c->addr_epoch--;
+	else
+	  {
+	    int r = do_icmp_ping(now, addr, j, loopback);
+
+	    if (r)
+	      {
+		/* consec-ip mode: we offered this address for another client
+		   (different hash) recently, don't offer it to this one. */
+		if (!option_bool(OPT_CONSEC_ADDR) || r > 1)
+		  return 1;
+	      }
+	    else
+	      {
+		/* address in use: perturb address selection so that we are
+		   less likely to try this address again. */
+		if (!option_bool(OPT_CONSEC_ADDR))
+		  c->addr_epoch++;
+	      }
+	  }
+      }
+  return 0;
+}
+
 int address_allocate(struct dhcp_context *context,
-		     struct in_addr *addrp, unsigned char *hwaddr, int hw_len, 
-		     struct dhcp_netid *netids, time_t now, int loopback)   
+		     struct in_addr *addrp, unsigned int hash,
+		     struct dhcp_netid *netids, time_t now, int loopback)
 {
   /* Find a free address: exclude anything in use and anything allocated to
      a particular hwaddr/clientid/hostname in our configuration.
      Try to return from contexts which match netids first. */
 
   struct in_addr start, addr;
-  struct dhcp_context *c, *d;
+  struct dhcp_context *c;
   int pass;
-  unsigned int j; 
-
-  j = ping_hash(hwaddr, hw_len);
 
   for (pass = 0; pass <= 1; pass++)
     for (c = context; c; c = c->current)
       if (c->flags & (CONTEXT_STATIC | CONTEXT_PROXY))
 	continue;
-      else if (!match_netid(c->filter, netids, pass))
-	continue;
-      else
+      else if (match_netid(c->filter, netids, pass))
 	{
-	  if (option_bool(OPT_CONSEC_ADDR))
-	    /* seed is largest extant lease addr in this context */
-	    start = lease_find_max_addr(c);
-	  else
-	    /* pick a seed based on hwaddr */
-	    start.s_addr = htonl(ntohl(c->start.s_addr) + 
-				 ((j + c->addr_epoch) % (1 + ntohl(c->end.s_addr) - ntohl(c->start.s_addr))));
-
 	  /* iterate until we find a free address. */
-	  addr = start;
-	  
+	  addr = start = dhcp_context_start_addr(c, hash);
+
 	  do {
-	    /* eliminate addresses in use by the server. */
-	    for (d = context; d; d = d->current)
-	      if (addr.s_addr == d->router.s_addr)
-		break;
-
-	    /* Addresses which end in .255 and .0 are broken in Windows even when using 
-	       supernetting. ie dhcp-range=192.168.0.1,192.168.1.254,255,255,254.0
-	       then 192.168.0.255 is a valid IP address, but not for Windows as it's
-	       in the class C range. See  KB281579. We therefore don't allocate these 
-	       addresses to avoid hard-to-diagnose problems. Thanks Bill. */	    
-	    if (!d &&
-		!lease_find_by_addr(addr) && 
-		!config_find_by_address(daemon->dhcp_conf, addr) &&
-		(!IN_CLASSC(ntohl(addr.s_addr)) || 
-		 ((ntohl(addr.s_addr) & 0xff) != 0xff && ((ntohl(addr.s_addr) & 0xff) != 0x0))))
+	    if (!dhcp_context_my_addr(context, addr) &&
+		address_free(c, addr, hash, now, loopback))
 	      {
-		/* in consec-ip mode, skip addresses equal to
-		   the number of addresses rejected by clients. This
-		   should avoid the same client being offered the same
-		   address after it has rjected it. */
-		if (option_bool(OPT_CONSEC_ADDR) && c->addr_epoch)
-		  c->addr_epoch--;
-		else
-		  {
-		    int r = do_icmp_ping(now, addr, j, loopback);
-		    
-		    if (r)
-		      {
-			/* consec-ip mode: we offered this address for another client
-			   (different hash) recently, don't offer it to this one. */
-			if (!option_bool(OPT_CONSEC_ADDR) || r > 1)
-			  {
-			    *addrp = addr;
-			    return 1;
-			  }
-		      }
-		    else
-		      {
-			/* address in use: perturb address selection so that we are
-			   less likely to try this address again. */
-			if (!option_bool(OPT_CONSEC_ADDR))
-			  c->addr_epoch++;
-		      }
-		  }
+		*addrp = addr;
+		return 1;
 	      }
-
-	    if (addr.s_addr == c->end.s_addr)
-	      addr = c->start;
-	    else
-	      addr.s_addr = htonl(ntohl(addr.s_addr) + 1);
-
+	    addr = dhcp_context_next_addr(c, addr);
 	  } while (addr.s_addr != start.s_addr);
 	}
 
   return 0;
+}
+
+struct dhcp_lease *find_temp_lease(struct dhcp_context *context, unsigned int hash,
+		     struct dhcp_netid *netids)
+{
+  /* Find a free address: exclude anything in use and anything allocated to
+     a particular hwaddr/clientid/hostname in our configuration.
+     Try to return from contexts which match netids first. */
+
+  struct in_addr start, addr;
+  struct dhcp_context *c;
+  int pass;
+  struct dhcp_lease *lease;
+
+  for (pass = 0; pass <= 1; pass++)
+    for (c = context; c; c = c->current)
+      if (c->flags & (CONTEXT_STATIC | CONTEXT_PROXY))
+	continue;
+      else if (match_netid(c->filter, netids, pass))
+	{
+	  /* iterate until we find a free address. */
+	  addr = start = dhcp_context_start_addr(c, hash);
+
+	  do {
+	    if (!dhcp_context_my_addr(context, addr) &&
+		!config_find_by_address(daemon->dhcp_conf, addr) &&
+		(lease = lease_find_by_addr(addr)) &&
+		(lease->flags & LEASE_TEMP))
+	      return lease;
+
+	    addr = dhcp_context_next_addr(c, addr);
+	  } while (addr.s_addr != start.s_addr);
+	}
+
+  return NULL;
 }
 
 void dhcp_read_ethers(void)

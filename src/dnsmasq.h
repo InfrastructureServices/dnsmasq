@@ -1504,8 +1504,10 @@ unsigned int ping_hash(unsigned char *hwaddr, int hw_len);
 int do_icmp_ping(time_t now, struct in_addr addr,
 		 unsigned int hash, int loopback);
 int address_allocate(struct dhcp_context *context,
-		     struct in_addr *addrp, unsigned char *hwaddr, int hw_len,
+		     struct in_addr *addrp, unsigned int ping_hash,
 		     struct dhcp_netid *netids, time_t now, int loopback);
+struct dhcp_lease *find_temp_lease(struct dhcp_context *context,
+				   unsigned int hash, struct dhcp_netid *netids);
 void dhcp_read_ethers(void);
 struct dhcp_config *config_find_by_address(struct dhcp_config *configs, struct in_addr addr);
 char *host_from_dns(struct in_addr addr);

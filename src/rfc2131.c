@@ -73,9 +73,13 @@ static struct dhcp_lease *temp_lease4_allocate(struct dhcp_context *context,
 		     struct dhcp_netid *netids, time_t now, int loopback)
 {
   struct dhcp_lease *lease;
-  if (!address_allocate(context, &mess->yiaddr, hwaddr, hw_len, netids, now, loopback))
-    return NULL;
-  lease = lease4_allocate(mess->yiaddr, 1);
+  unsigned int hash = ping_hash(hwaddr, hw_len);
+  if (!address_allocate(context, &mess->yiaddr, hash, netids, now, loopback))
+    /* When no unused address is available, reuse first temporary lease
+     * with matching address. */
+    lease = find_temp_lease(context, hash, netids);
+  else
+    lease = lease4_allocate(mess->yiaddr, 1);
   if (lease)
     {
       lease_set_hwaddr(lease, mess->chaddr, NULL, mess->hlen, mess->htype, 0, now, 0);
@@ -639,8 +643,8 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		       lease_prune(lease, now);
 		       lease = NULL;
 		     }
-		   if (!address_allocate(context, &mess->yiaddr, mess->chaddr,
-					 mess->hlen, tagif_netid, now, loopback))
+		   if (!address_allocate(context, &mess->yiaddr, ping_hash(mess->chaddr, mess->hlen),
+					 tagif_netid, now, loopback))
 		     message = _("no address available");
 		}
 	      else
