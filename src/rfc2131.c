@@ -1493,7 +1493,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	    }
 	  
 	  time = calc_time(context, config, option_find(mess, sz, OPTION_LEASE_TIME, 4));
-	  lease->flags &= ~LEASE_TEMP;
+	  lease_set_permanent(lease);
 	  lease_set_hwaddr(lease, mess->chaddr, clid, mess->hlen, mess->htype, clid_len, now, do_classes);
 	  
 	  /* if all the netids in the ignore_name list are present, ignore client-supplied name */
