@@ -1545,6 +1545,8 @@ struct dhcp_lease *lease_find_by_client(unsigned char *hwaddr, int hw_len, int h
 struct dhcp_lease *lease_find_by_addr(struct in_addr addr);
 struct in_addr lease_find_max_addr(struct dhcp_context *context);
 void lease_prune(struct dhcp_lease *target, time_t now);
+void lease_free_any_temporary(time_t now);
+int lease_have_temporary(void);
 void lease_update_from_configs(void);
 int do_script_run(time_t now);
 void rerun_scripts(void);

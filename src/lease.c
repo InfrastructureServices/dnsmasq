@@ -19,7 +19,7 @@
 #ifdef HAVE_DHCP
 
 static struct dhcp_lease *leases = NULL, *old_leases = NULL;
-static int dns_dirty, file_dirty, leases_left;
+static int dns_dirty, file_dirty, leases_left, lease_temporaries;
 
 static int read_leases(time_t now, FILE *leasestream)
 {
@@ -552,6 +552,8 @@ void lease_prune(struct dhcp_lease *target, time_t now)
 	{
 	  if ((lease->flags & LEASE_TEMP) == 0)
 	    file_dirty = 1;
+	  else
+	    lease_temporaries--;
 	  if (lease->hostname)
 	    dns_dirty = 1;
 
@@ -570,8 +572,26 @@ void lease_prune(struct dhcp_lease *target, time_t now)
 	up = &lease->next;
     }
 } 
-	
-  
+
+/* Find and release single temporary address. */
+void lease_free_any_temporary(time_t now)
+{
+  struct dhcp_lease *lease;
+
+  for (lease = leases; lease; lease = lease->next)
+    if (lease->flags & LEASE_TEMP)
+      {
+	lease_prune(lease, now);
+	break;
+      }
+}
+
+int lease_have_temporary(void)
+{
+  return (lease_temporaries > 0);
+}
+
+
 struct dhcp_lease *lease_find_by_client(unsigned char *hwaddr, int hw_len, int hw_type,
 					unsigned char *clid, int clid_len)
 {
@@ -622,6 +642,7 @@ struct dhcp_lease *lease_find_by_addr(struct in_addr addr)
 
   return NULL;
 }
+
 
 #ifdef HAVE_DHCP6
 /* find address for {CLID, IAID, address} */
@@ -774,6 +795,7 @@ static struct dhcp_lease *lease_allocate(int temp)
   else
     {
       lease->flags |= LEASE_TEMP;
+      lease_temporaries++;
     }
 
   return lease;
@@ -926,7 +948,11 @@ void lease_set_hwaddr(struct dhcp_lease *lease, const unsigned char *hwaddr,
 void lease_set_permanent(struct dhcp_lease *lease)
 {
   if (lease->flags & LEASE_TEMP)
-    set_modified(lease, LEASE_CHANGED);
+    {
+      lease->flags &= ~LEASE_TEMP;
+      set_modified(lease, LEASE_CHANGED);
+      lease_temporaries--;
+    }
 }
 
 static void kill_name(struct dhcp_lease *lease)

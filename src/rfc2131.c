@@ -72,12 +72,25 @@ static struct dhcp_lease *temp_lease4_allocate(struct dhcp_context *context,
 		     struct dhcp_packet *mess, unsigned char *hwaddr, int hw_len,
 		     struct dhcp_netid *netids, time_t now, int loopback)
 {
-  struct dhcp_lease *lease;
+  struct dhcp_lease *lease = NULL;
   unsigned int hash = ping_hash(hwaddr, hw_len);
   if (!address_allocate(context, &mess->yiaddr, hash, netids, now, loopback))
-    /* When no unused address is available, reuse first temporary lease
-     * with matching address. */
-    lease = find_temp_lease(context, hash, netids);
+    {
+      if (lease_have_temporary())
+	{
+	  /* When no unused address is available, reuse first temporary lease
+	  * with matching address. */
+	  lease = find_temp_lease(context, hash, netids);
+	  if (!lease)
+	    {
+	      /* Not found temp lease in requested range.
+	       * Force free any temporary lease and retry. */
+	      lease_free_any_temporary(now);
+	      if (address_allocate(context, &mess->yiaddr, hash, netids, now, loopback))
+		lease = lease4_allocate(mess->yiaddr, 1);
+	    }
+	}
+    }
   else
     lease = lease4_allocate(mess->yiaddr, 1);
   if (lease)
