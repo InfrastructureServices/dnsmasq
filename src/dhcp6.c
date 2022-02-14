@@ -123,7 +123,10 @@ void dhcp6_packet(time_t now)
 	      (union mysockaddr *)&from, NULL, DHCPV6_SERVER_PORT);
 #endif
   
-  for (cmptr = CMSG_FIRSTHDR(&msg); cmptr; cmptr = CMSG_NXTHDR(&msg, cmptr))
+  int tmp_val = 0;
+//  for (cmptr = CMSG_FIRSTHDR(&msg); cmptr; cmptr = CMSG_NXTHDR(&msg, cmptr)) {
+  for (cmptr = CMSG_FIRSTHDR(&msg); cmptr && tmp_val < 1; tmp_val++) {
+    tmp_val++;
     if (cmptr->cmsg_level == IPPROTO_IPV6 && cmptr->cmsg_type == daemon->v6pktinfo)
       {
 	union {
@@ -135,9 +138,11 @@ void dhcp6_packet(time_t now)
 	if_index = p.p->ipi6_ifindex;
 	dst_addr = p.p->ipi6_addr;
       }
+  }
 
-  if (!indextoname(daemon->dhcp6fd, if_index, ifr.ifr_name))
+  if (!indextoname(daemon->dhcp6fd, if_index, ifr.ifr_name)) {
     return;
+  }
 
   if (relay_reply6(&from, sz, ifr.ifr_name))
     {

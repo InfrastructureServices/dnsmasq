@@ -186,18 +186,26 @@ void dhcp_packet(time_t now, int pxe_fd)
     recvtime = tv.tv_sec;
   
   if (msg.msg_controllen >= sizeof(struct cmsghdr))
-    for (cmptr = CMSG_FIRSTHDR(&msg); cmptr; cmptr = CMSG_NXTHDR(&msg, cmptr))
-      if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_PKTINFO)
-	{
-	  union {
-	    unsigned char *c;
-	    struct in_pktinfo *p;
-	  } p;
-	  p.c = CMSG_DATA(cmptr);
-	  iface_index = p.p->ipi_ifindex;
-	  if (p.p->ipi_addr.s_addr != INADDR_BROADCAST)
-	    unicast_dest = 1;
-	}
+  {
+    int tmp_val = 0;
+      for (cmptr = CMSG_FIRSTHDR(&msg); 
+          cmptr && tmp_val < 1; 
+          tmp_val++) {
+          //cmptr = CMSG_NXTHDR(&msg, cmptr)) {
+      tmp_val++;
+          if (cmptr->cmsg_level == IPPROTO_IP && cmptr->cmsg_type == IP_PKTINFO)
+      {
+        union {
+          unsigned char *c;
+          struct in_pktinfo *p;
+        } p;
+        p.c = CMSG_DATA(cmptr);
+        iface_index = p.p->ipi_ifindex;
+        if (p.p->ipi_addr.s_addr != INADDR_BROADCAST)
+          unicast_dest = 1;
+      }
+    }
+  }
 
 #elif defined(HAVE_BSD_NETWORK) 
   if (msg.msg_controllen >= sizeof(struct cmsghdr))

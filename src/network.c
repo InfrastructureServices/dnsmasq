@@ -728,6 +728,7 @@ int enumerate_interfaces(int reset)
   struct auth_zone *zone;
 #endif
   struct server *serv;
+  int iteration = 0;
   
   /* Do this max once per select cycle  - also inhibits netlink socket use
    in TCP child processes. */
@@ -765,6 +766,10 @@ int enumerate_interfaces(int reset)
       }
     
 again:
+  if (iteration > 100) {
+    return 0;
+  }
+  iteration += 1;
   /* Mark interfaces for garbage collection */
   for (iface = daemon->interfaces; iface; iface = iface->next) 
     iface->found = 0;

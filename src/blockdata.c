@@ -15,9 +15,13 @@
 */
 
 #include "dnsmasq.h"
+#include <assert.h>
 
 static struct blockdata *keyblock_free;
 static unsigned int blockdata_count, blockdata_hwm, blockdata_alloced;
+
+void *total_allocated[200] = {0};
+static int fuzz_total_alloc_ptr = 0;
 
 static void blockdata_expand(int n)
 {
@@ -25,6 +29,8 @@ static void blockdata_expand(int n)
   
   if (new)
     {
+      assert(fuzz_total_alloc_ptr < 200);
+      total_allocated[fuzz_total_alloc_ptr++] = (void*)new;
       int i;
       
       new[n-1].next = keyblock_free;
@@ -45,9 +51,21 @@ void blockdata_init(void)
   blockdata_count = 0;
   blockdata_hwm = 0;
 
+  fuzz_total_alloc_ptr = 0;
+  for (int m = 0; m < 200; m++)
+	  total_allocated[m] = NULL;
+
   /* Note that daemon->cachesize is enforced to have non-zero size if OPT_DNSSEC_VALID is set */  
   if (option_bool(OPT_DNSSEC_VALID))
     blockdata_expand(daemon->cachesize);
+}
+
+void fuzz_blockdata_cleanup() {
+	for (int i = 0; i < 200; i++) {
+		if (total_allocated[i] != NULL) {
+			free(total_allocated[i]);
+		}
+	}
 }
 
 void blockdata_report(void)

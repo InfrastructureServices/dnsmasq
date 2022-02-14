@@ -190,8 +190,13 @@ int iface_enumerate(int family, void *parm, int (*callback)())
   if (errno != 0)
     return 0;
     
+  int valval = 0;
   while (1)
     {
+      valval++;
+      if (valval > 300) {
+        return -1;
+      }
       if ((len = netlink_recv(0)) == -1)
 	{
 	  if (errno == ENOBUFS)
