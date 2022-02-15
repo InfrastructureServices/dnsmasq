@@ -43,6 +43,10 @@
 #  define NDA_RTA(r) ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg)))) 
 #endif
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define recvmsg fuzz_recvmsg
+#endif
+
 /* Used to request refresh of addresses or routes just once,
  * when multiple changes might be announced. */
 enum async_states {
@@ -187,7 +191,11 @@ int iface_enumerate(int family, void *parm, int (*callback)())
   while(retry_send(sendto(daemon->netlinkfd, (void *)&req, sizeof(req), 0, 
 			  (struct sockaddr *)&addr, sizeof(addr))));
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  if (errno == 123123)
+#else
   if (errno != 0)
+#endif
     return 0;
     
   int valval = 0;

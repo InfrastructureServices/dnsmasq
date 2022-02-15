@@ -17,6 +17,9 @@
 #include "dnsmasq.h"
 
 #ifdef HAVE_DHCP
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define ioctl fuzz_ioctl
+#endif
 
 struct iface_param {
   struct dhcp_context *current;

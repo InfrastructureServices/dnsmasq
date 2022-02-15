@@ -20,11 +20,12 @@ export ASAN_OPTIONS="detect_leaks=0"
 [ -r "$SRC/fuzz_patch.patch" ] && \
   git apply  --ignore-space-change --ignore-whitespace $SRC/fuzz_patch.patch
 
-export OSS_CFLAGS="$CFLAGS -g"
+export OSS_CFLAGS="$CFLAGS -g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 
 sed -i 's/CFLAGS        =/CFLAGS        = ${OSS_CFLAGS} /g' ./Makefile
 sed -i 's/LDFLAGS       =/LDFLAGS       = ${OSS_CFLAGS} /g' ./Makefile
 
+if false; then
 # Do some modificatiosn to the source
 sed -i 's/recvmsg(/fuzz_recvmsg(/g' ./src/dhcp-common.c 
 sed -i 's/recvmsg(/fuzz_recvmsg(/g' ./src/netlink.c 
@@ -36,16 +37,19 @@ sed -i 's/if (errno != 0/if (errno == 123123/g' ./src/netlink.c
 echo "" >> ./src/dnsmasq.c 
 echo "ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {return -1;}" >> ./src/dnsmasq.c
 echo "int fuzz_ioctl(int fd, unsigned long request, void *arg) {return -1;}" >> ./src/dnsmasq.c
-make
+fi # applied by ifdefs
+make CFLAGS="$OSS_CFLAGS" LDFLAGS="$OSS_CFLAGS"
 
 # Remove main function and create an archive
 cd ./src
+if false; then
 sed -i 's/int main (/int main2 (/g' ./dnsmasq.c
 sed -i 's/fuzz_recvmsg(/fuzz_recvmsg2(/g' ./dnsmasq.c
 sed -i 's/fuzz_ioctl(/fuzz_ioctl2(/g' ./dnsmasq.c
+fi
 
 rm dnsmasq.o
-$CC $CFLAGS -c dnsmasq.c -o dnsmasq.o -I./ -DVERSION=\'\"UNKNOWN\"\' 
+$CC $CFLAGS -c dnsmasq.c -o dnsmasq.o -I./ -DVERSION=\'\"UNKNOWN\"\' -DNO_MAIN
 ar cr libdnsmasq.a *.o
 
 # Needed only by C++ compiler??

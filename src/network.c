@@ -17,6 +17,9 @@
 #include "dnsmasq.h"
 
 #ifdef HAVE_LINUX_NETWORK
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define ioctl fuzz_ioctl
+#endif
 
 int indextoname(int fd, int index, char *name)
 {

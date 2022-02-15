@@ -37,7 +37,18 @@ static void fatal_event(struct event_desc *ev, char *msg);
 static int read_event(int fd, struct event_desc *evp, char **msg);
 static void poll_resolv(int force, int do_reload, time_t now);
 
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) && !defined(NO_MAIN)
+ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags)
+{ (void)sockfd; (void)msg; (void)flags; return -1;}
+int fuzz_ioctl(int fd, unsigned long request, void *arg)
+{ (void)fd; (void)request; (void)arg; return -1;}
+#endif
+
+#ifdef NO_MAIN
+int fuzz_main (int argc, char **argv)
+#else
 int main (int argc, char **argv)
+#endif
 {
   time_t now;
   struct sigaction sigact;

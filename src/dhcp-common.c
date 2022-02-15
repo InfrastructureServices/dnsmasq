@@ -17,6 +17,10 @@
 #include "dnsmasq.h"
 
 #ifdef HAVE_DHCP
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define recvmsg fuzz_recvmsg
+#define ioctl fuzz_ioctl
+#endif
 
 void dhcp_common_init(void)
 {
