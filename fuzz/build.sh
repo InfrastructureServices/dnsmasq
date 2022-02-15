@@ -22,8 +22,8 @@ export ASAN_OPTIONS="detect_leaks=0"
 
 export OSS_CFLAGS="$CFLAGS -g -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION"
 
-sed -i 's/CFLAGS        =/CFLAGS        = ${OSS_CFLAGS} /g' ./Makefile
-sed -i 's/LDFLAGS       =/LDFLAGS       = ${OSS_CFLAGS} /g' ./Makefile
+#sed -i 's/CFLAGS        =/CFLAGS        = ${OSS_CFLAGS} /g' ./Makefile
+#sed -i 's/LDFLAGS       =/LDFLAGS       = ${OSS_CFLAGS} /g' ./Makefile
 
 if false; then
 # Do some modificatiosn to the source
@@ -38,7 +38,8 @@ echo "" >> ./src/dnsmasq.c
 echo "ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {return -1;}" >> ./src/dnsmasq.c
 echo "int fuzz_ioctl(int fd, unsigned long request, void *arg) {return -1;}" >> ./src/dnsmasq.c
 fi # applied by ifdefs
-make CFLAGS="$OSS_CFLAGS" LDFLAGS="$OSS_CFLAGS"
+rm -f ./src/dnsmasq.o
+make CFLAGS="$OSS_CFLAGS -g -Wall" LDFLAGS="$OSS_CFLAGS"
 
 # Remove main function and create an archive
 cd ./src
