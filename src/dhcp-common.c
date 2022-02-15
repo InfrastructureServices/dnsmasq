@@ -19,7 +19,7 @@
 #ifdef HAVE_DHCP
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #define recvmsg fuzz_recvmsg
-#define ioctl fuzz_ioctl
+ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags);
 #endif
 
 void dhcp_common_init(void)

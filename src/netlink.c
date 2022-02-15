@@ -45,6 +45,7 @@
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #define recvmsg fuzz_recvmsg
+ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags);
 #endif
 
 /* Used to request refresh of addresses or routes just once,

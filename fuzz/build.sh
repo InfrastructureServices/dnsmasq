@@ -49,7 +49,7 @@ sed -i 's/fuzz_ioctl(/fuzz_ioctl2(/g' ./dnsmasq.c
 fi
 
 rm dnsmasq.o
-$CC $CFLAGS -c dnsmasq.c -o dnsmasq.o -I./ -DVERSION=\'\"UNKNOWN\"\' -DNO_MAIN
+$CC $CFLAGS -c dnsmasq.c -o dnsmasq.o -I./ -DVERSION='"UNKNOWN"' -DNO_MAIN
 ar cr libdnsmasq.a *.o
 
 # Needed only by C++ compiler??
