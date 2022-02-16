@@ -346,7 +346,8 @@ size_t resize_packet(struct dns_header *header, size_t plen, unsigned char *phea
     return plen;
     
   /* restore pseudoheader */
-  if (pheader && ntohs(header->arcount) == 0)
+  if (pheader && ntohs(header->arcount) == 0 &&
+      (ansp + hlen - (unsigned char *)header) <= plen)
     {
       /* must use memmove, may overlap */
       memmove(ansp, pheader, hlen);
