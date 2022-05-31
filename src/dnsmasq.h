@@ -1451,6 +1451,8 @@ int option_read_dynfile(char *file, int flags);
 
 /* forward.c */
 void reply_query(int fd, time_t now);
+void reply_query_data(int fd, time_t now, struct dns_header *header, ssize_t n,
+		      union mysockaddr *serveraddr);
 void receive_query(struct listener *listen, time_t now);
 unsigned char *tcp_request(int confd, time_t now,
 			   union mysockaddr *local_addr, struct in_addr netmask, int auth_dns);

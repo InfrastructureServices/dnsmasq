@@ -1000,12 +1000,8 @@ void reply_query(int fd, time_t now)
      original requester */
   struct dns_header *header;
   union mysockaddr serveraddr;
-  struct frec *forward;
   socklen_t addrlen = sizeof(serveraddr);
   ssize_t n = recvfrom(fd, daemon->packet, daemon->packet_buff_sz, 0, &serveraddr.sa, &addrlen);
-  struct server *server;
-  void *hash;
-  int first, last, c;
     
   /* packet buffer overwritten */
   daemon->srv_save = NULL;
@@ -1016,6 +1012,17 @@ void reply_query(int fd, time_t now)
   
   header = (struct dns_header *)daemon->packet;
 
+  reply_query_data(fd, now, header, n, &serveraddr);
+}
+
+/* Process forwarder reply received from (random) socket. */
+void reply_query_data(int fd, time_t now, struct dns_header *header, ssize_t n,
+		      union mysockaddr *serveraddr)
+{
+  struct frec *forward;
+  struct server *server;
+  void *hash;
+  int first, last, c;
   if (n < (int)sizeof(struct dns_header) || !(header->hb3 & HB3_QR))
     return;
 
@@ -1023,12 +1030,12 @@ void reply_query(int fd, time_t now)
   
   if (!(forward = lookup_frec(ntohs(header->id), fd, hash, &first, &last)))
     return;
-  
+
   /* spoof check: answer must come from known server, also
      we may have sent the same query to multiple servers from
      the same local socket, and would like to know which one has answered. */
   for (c = first; c != last; c++)
-    if (sockaddr_isequal(&daemon->serverarray[c]->addr, &serveraddr))
+    if (sockaddr_isequal(&daemon->serverarray[c]->addr, serveraddr))
       break;
   
   if (c == last)
@@ -1047,7 +1054,7 @@ void reply_query(int fd, time_t now)
 
 #ifdef HAVE_DUMPFILE
   dump_packet((forward->flags & (FREC_DNSKEY_QUERY | FREC_DS_QUERY)) ? DUMP_SEC_REPLY : DUMP_UP_REPLY,
-	      (void *)header, n, &serveraddr, NULL, daemon->port);
+	      (void *)header, n, serveraddr, NULL, daemon->port);
 #endif
 
   /* log_query gets called indirectly all over the place, so 
