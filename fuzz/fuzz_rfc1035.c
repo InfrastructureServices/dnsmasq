@@ -152,19 +152,30 @@ void FuzzArpaName2Addr(const uint8_t **data2, size_t *size2) {
 void FuzzResizePacket(const uint8_t **data2, size_t *size2) {
   const uint8_t *data = *data2;
   size_t size = *size2;
+  char *new_data = NULL;
+  struct dns_header *header;
+  size_t plen = 0;
+  unsigned char *pheader = NULL;
+  unsigned char *udpsz = NULL;
+  int is_sign = 0;
 
-  char *new_packet = malloc(50);
+  /* Why 50? Is that computed from something? */
+  if (size <= (sizeof(struct dns_header) + 50))
+    {
+      resize_packet(header, size, NULL, 0);
+      return;
+    }
 
-  if (size > (sizeof(struct dns_header) + 50)) {
-    char *new_data = malloc(size+1);
-    memset(new_data, 0, size);
-    memcpy(new_data, data, size);
-    new_data[size] = '\0';
-    pointer_arr[pointer_idx++] = (void*)new_data;
+  new_data = malloc(size+1);
+  memcpy(new_data, data, size);
+  new_data[size] = '\0';
+  pointer_arr[pointer_idx++] = (void*)new_data;
 
-    resize_packet((struct dns_header *)new_data, size, (unsigned char*)new_packet, 50);    
-  }
-  free(new_packet);
+  header = (struct dns_header *) new_data;
+  pheader = find_pseudoheader(header, size, &plen, &udpsz, &is_sign, NULL);
+  /* In dnsmasq code it always uses find_pseudoheader plen to resize.
+   * Except one place, where it uses 0. */
+  resize_packet(header, size, pheader, plen);
 }
 
 void FuzzSetupReply(const uint8_t **data2, size_t *size2) {
