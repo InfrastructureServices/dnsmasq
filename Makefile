@@ -72,6 +72,8 @@ gmp_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_DNSSEC NO_GMP --cop
 sunos_libs =    `if uname | grep SunOS >/dev/null 2>&1; then echo -lsocket -lnsl -lposix4; fi`
 nft_cflags =    `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_NFTSET $(PKG_CONFIG) --cflags libnftables` 
 nft_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_NFTSET $(PKG_CONFIG) --libs libnftables`
+fuzz_cflags =   `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_FUZZ "" --copy '-g -O1 -fno-omit-frame-pointer -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=fuzzer-no-link -DNO_MAIN'`
+fuzz_libs =     `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_FUZZ "" --copy '-fsanitize=fuzzer,address'`
 version =       -DVERSION='\"`$(top)/bld/get-version $(top)`\"'
 
 sum?=$(shell $(CC) -DDNSMASQ_COMPILE_OPTS $(COPTS) -E $(top)/$(SRC)/dnsmasq.h | ( md5sum 2>/dev/null || md5 ) | cut -f 1 -d ' ')
@@ -92,13 +94,20 @@ hdrs = dnsmasq.h config.h dhcp-protocol.h dhcp6-protocol.h \
 all : $(BUILDDIR)
 	@cd $(BUILDDIR) && $(MAKE) \
  top="$(top)" \
- build_cflags="$(version) $(dbus_cflags) $(idn2_cflags) $(idn_cflags) $(ct_cflags) $(lua_cflags) $(nettle_cflags) $(nft_cflags)" \
- build_libs="$(dbus_libs) $(idn2_libs) $(idn_libs) $(ct_libs) $(lua_libs) $(sunos_libs) $(nettle_libs) $(gmp_libs) $(ubus_libs) $(nft_libs)" \
+ build_cflags="$(version) $(dbus_cflags) $(idn2_cflags) $(idn_cflags) $(ct_cflags) $(lua_cflags) $(nettle_cflags) $(nft_cflags) $(fuzz_cflags)" \
+ build_libs="$(dbus_libs) $(idn2_libs) $(idn_libs) $(ct_libs) $(lua_libs) $(sunos_libs) $(nettle_libs) $(gmp_libs) $(ubus_libs) $(nft_libs) $(fuzz_libs)" \
  -f $(top)/Makefile dnsmasq 
+
+fuzzers : $(BUILDDIR)
+	@cd $(BUILDDIR) && $(MAKE) \
+ top="$(top)" \
+ build_cflags="-I$(top)/$(SRC) $(version) $(dbus_cflags) $(idn2_cflags) $(idn_cflags) $(ct_cflags) $(lua_cflags) $(nettle_cflags) $(nft_cflags) $(fuzz_cflags)" \
+ build_libs="$(dbus_libs) $(idn2_libs) $(idn_libs) $(ct_libs) $(lua_libs) $(sunos_libs) $(nettle_libs) $(gmp_libs) $(ubus_libs) $(nft_libs) $(fuzz_libs)" \
+ -f $(top)/Makefile fuzzers_build 
 
 mostly_clean :
 	rm -f $(BUILDDIR)/*.mo $(BUILDDIR)/*.pot 
-	rm -f $(BUILDDIR)/.copts_* $(BUILDDIR)/*.o $(BUILDDIR)/dnsmasq.a $(BUILDDIR)/dnsmasq
+	rm -f $(BUILDDIR)/.copts_* $(BUILDDIR)/*.o $(BUILDDIR)/fuzz_{auth,dhcp,dhcp6,rfc1035,util} $(BUILDDIR)/dnsmasq
 
 clean : mostly_clean
 	rm -f $(BUILDDIR)/dnsmasq_baseline
@@ -169,6 +178,23 @@ $(objs): $(copts_conf) $(hdrs)
 
 dnsmasq : $(objs)
 	$(CC) $(LDFLAGS) -o $@ $(objs) $(build_libs) $(LIBS) 
+
+fuzzers_build: fuzz_auth fuzz_dhcp fuzz_dhcp6 fuzz_rfc1035 fuzz_util
+
+fuzz_auth : $(objs) $(top)/$(SRC)/fuzz/fuzz_auth.o
+	$(CC) $(LDFLAGS) -o $@ $(objs) $@.o $(build_libs) $(LIBS)
+
+fuzz_dhcp : $(objs) $(top)/$(SRC)/fuzz/fuzz_dhcp.o
+	$(CC) $(LDFLAGS) -o $@ $(objs) $@.o $(build_libs) $(LIBS)
+
+fuzz_dhcp6 : $(objs) $(top)/$(SRC)/fuzz/fuzz_dhcp6.o
+	$(CC) $(LDFLAGS) -o $@ $(objs) $@.o $(build_libs) $(LIBS)
+
+fuzz_rfc1035 : $(objs) $(top)/$(SRC)/fuzz/fuzz_rfc1035.o
+	$(CC) $(LDFLAGS) -o $@ $(objs) $@.o $(build_libs) $(LIBS)
+
+fuzz_util : $(objs) $(top)/$(SRC)/fuzz/fuzz_util.o
+	$(CC) $(LDFLAGS) -o $@ $(objs) $@.o $(build_libs) $(LIBS)
 
 dnsmasq.pot : $(objs:.o=.c) $(hdrs)
 	$(XGETTEXT) -d dnsmasq --foreign-user --omit-header --keyword=_ -o $@ -i $(objs:.o=.c)
