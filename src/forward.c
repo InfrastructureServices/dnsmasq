@@ -16,12 +16,23 @@
 
 #include "dnsmasq.h"
 
+struct serverarray_lookup {
+  struct frec *forward;
+  int first, last, c;
+};
+
 static struct frec *get_new_frec(time_t now, struct server *serv, int force);
-static struct frec *lookup_frec(unsigned short id, int fd, void *hash, int *firstp, int *lastp);
+static int lookup_frec(unsigned short id, int fd, void *hash, struct serverarray_lookup *l);
+static struct server *lookup_frec_server(unsigned short id, int fd, void *hash,
+					 struct serverarray_lookup *l,
+					 union mysockaddr *serveraddr);
 static struct frec *lookup_frec_by_query(void *hash, unsigned int flags, unsigned int flagmask);
 #ifdef HAVE_DNSSEC
 static struct frec *lookup_frec_dnssec(char *target, int class, int flags, struct dns_header *header);
 #endif
+static void reply_query_server(int fd, time_t now,
+			       struct dns_header *header, ssize_t n,
+			       union mysockaddr *serveraddr);
 
 static unsigned short get_id(void);
 static void free_frec(struct frec *f);
@@ -1012,41 +1023,39 @@ void reply_query(int fd, time_t now)
   
   header = (struct dns_header *)daemon->packet;
 
-  reply_query_data(fd, now, header, n, &serveraddr);
+  reply_query_server(fd, now, header, n, &serveraddr);
 }
 
-/* Process forwarder reply received from (random) socket. */
-void reply_query_data(int fd, time_t now, struct dns_header *header, ssize_t n,
-		      union mysockaddr *serveraddr)
+static void serverarray_set_last(unsigned rcode, struct serverarray_lookup *l)
+{
+  if (rcode != REFUSED)
+    daemon->serverarray[l->first]->last_server = l->c;
+  else if (daemon->serverarray[l->first]->last_server == l->c)
+    daemon->serverarray[l->first]->last_server = -1;
+}
+
+/* search server and forward for received query. */
+static void reply_query_server(int fd, time_t now,
+			       struct dns_header *header, ssize_t n,
+			       union mysockaddr *serveraddr)
 {
   struct frec *forward;
   struct server *server;
   void *hash;
-  int first, last, c;
+  struct serverarray_lookup l = { 0, };
+  unsigned rcode;
+
   if (n < (int)sizeof(struct dns_header) || !(header->hb3 & HB3_QR))
     return;
 
   hash = hash_questions(header, n, daemon->namebuff);
   
-  if (!(forward = lookup_frec(ntohs(header->id), fd, hash, &first, &last)))
+  if (!(server = lookup_frec_server(ntohs(header->id), fd, hash, &l, serveraddr)))
     return;
 
-  /* spoof check: answer must come from known server, also
-     we may have sent the same query to multiple servers from
-     the same local socket, and would like to know which one has answered. */
-  for (c = first; c != last; c++)
-    if (sockaddr_isequal(&daemon->serverarray[c]->addr, serveraddr))
-      break;
-  
-  if (c == last)
-    return;
-
-  server = daemon->serverarray[c];
-
-  if (RCODE(header) != REFUSED)
-    daemon->serverarray[first]->last_server = c;
-  else if (daemon->serverarray[first]->last_server == c)
-    daemon->serverarray[first]->last_server = -1;
+  forward = l.forward;
+  rcode = RCODE(header);
+  serverarray_set_last(rcode, &l);
 
   /* If sufficient time has elapsed, try and expand UDP buffer size again. */
   if (difftime(now, server->pktsz_reduced) > UDP_TEST_TIME)
@@ -1056,7 +1065,17 @@ void reply_query_data(int fd, time_t now, struct dns_header *header, ssize_t n,
   dump_packet((forward->flags & (FREC_DNSKEY_QUERY | FREC_DS_QUERY)) ? DUMP_SEC_REPLY : DUMP_UP_REPLY,
 	      (void *)header, n, serveraddr, NULL, daemon->port);
 #endif
+  reply_query_data(now, header, n, server, forward);
+}
 
+/* Process forwarder reply received from a (random) socket.
+ *
+ * Server and forward structures have to be initialized already.
+ * Public to be able tested from unittest and similar. Allows
+ * skip of forwarder frec match. */
+void reply_query_data(time_t now, struct dns_header *header, ssize_t n,
+		      struct server *server, struct frec *forward)
+{
   /* log_query gets called indirectly all over the place, so 
      pass these in global variables - sorry. */
   daemon->log_display_id = forward->frec_src.log_id;
@@ -2575,8 +2594,7 @@ static void query_full(time_t now, char *domain)
     }
 }
 
-
-static struct frec *lookup_frec(unsigned short id, int fd, void *hash, int *firstp, int *lastp)
+static int lookup_frec(unsigned short id, int fd, void *hash, struct serverarray_lookup *l)
 {
   struct frec *f;
   struct server *s;
@@ -2588,25 +2606,55 @@ static struct frec *lookup_frec(unsigned short id, int fd, void *hash, int *firs
       if (f->sentto && f->new_id == id && 
 	  (memcmp(hash, f->hash, HASH_SIZE) == 0))
 	{
-	  filter_servers(f->sentto->arrayposn, F_SERVER, firstp, lastp);
+	  filter_servers(f->sentto->arrayposn, F_SERVER, &l->first, &l->last);
 	  
 	  /* sent from random port */
 	  for (fdl = f->rfds; fdl; fdl = fdl->next)
 	    if (fdl->rfd->fd == fd)
-	      return f;
+	      {
+		l->forward = f;
+		return 1;
+	      }
 	  
 	  /* Sent to upstream from socket associated with a server. 
 	     Note we have to iterate over all the possible servers, since they may
 	     have different bound sockets. */
-	  for (first = *firstp, last = *lastp; first != last; first++)
+	  for (first = l->first, last = l->last; first != last; first++)
 	    {
 	      s = daemon->serverarray[first];
 	      if (s->sfd && s->sfd->fd == fd)
-		return f;
+		{
+		  l->forward = f;
+		  return 1;
+		}
 	    }
 	}
   
-  return NULL;
+  return 0;
+}
+
+/* Obtain server and frec structure with bounds in serverarray from
+ * forwarder response. */
+static struct server *lookup_frec_server(unsigned short id, int fd, void *hash,
+					 struct serverarray_lookup *l,
+					 union mysockaddr *serveraddr)
+{
+  int c;
+
+  if (!lookup_frec(id, fd, hash, l))
+    return NULL;
+
+  /* spoof check: answer must come from known server, also
+     we may have sent the same query to multiple servers from
+     the same local socket, and would like to know which one has answered. */
+  for (c = l->first; c != l->last; c++)
+    if (sockaddr_isequal(&daemon->serverarray[c]->addr, serveraddr))
+      break;
+  
+  if (c == l->last)
+    return NULL;
+  l->c = c;
+  return daemon->serverarray[c];
 }
 
 static struct frec *lookup_frec_by_query(void *hash, unsigned int flags, unsigned int flagmask)
