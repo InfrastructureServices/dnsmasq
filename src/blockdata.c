@@ -15,13 +15,43 @@
 */
 
 #include "dnsmasq.h"
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #include <assert.h>
+#endif
 
 static struct blockdata *keyblock_free;
 static unsigned int blockdata_count, blockdata_hwm, blockdata_alloced;
 
-void *total_allocated[200] = {0};
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define MAX_ALLOCATED 200
+static void *total_allocated[MAX_ALLOCATED] = {0};
 static int fuzz_total_alloc_ptr = 0;
+
+static void fuzz_allocated(struct blockdata *new)
+{
+      assert(fuzz_total_alloc_ptr < MAX_ALLOCATED);
+      total_allocated[fuzz_total_alloc_ptr++] = (void*)new;
+}
+
+static void fuzz_allocate_init(void)
+{
+  fuzz_total_alloc_ptr = 0;
+  for (int m = 0; m < MAX_ALLOCATED; m++)
+	  total_allocated[m] = NULL;
+}
+
+void fuzz_blockdata_cleanup()
+{
+  for (int i = 0; i < MAX_ALLOCATED; i++)
+    if (total_allocated[i] != NULL)
+      {
+	free(total_allocated[i]);
+	total_allocated[i] = NULL;
+      }
+
+  fuzz_total_alloc_ptr = 0;
+}
+#endif
 
 static void blockdata_expand(int n)
 {
@@ -29,12 +59,13 @@ static void blockdata_expand(int n)
   
   if (new)
     {
-      assert(fuzz_total_alloc_ptr < 200);
-      total_allocated[fuzz_total_alloc_ptr++] = (void*)new;
       int i;
       
       new[n-1].next = keyblock_free;
       keyblock_free = new;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+      fuzz_allocated(new);
+#endif
 
       for (i = 0; i < n - 1; i++)
 	new[i].next = &new[i+1];
@@ -51,21 +82,13 @@ void blockdata_init(void)
   blockdata_count = 0;
   blockdata_hwm = 0;
 
-  fuzz_total_alloc_ptr = 0;
-  for (int m = 0; m < 200; m++)
-	  total_allocated[m] = NULL;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  fuzz_allocate_init();
+#endif
 
   /* Note that daemon->cachesize is enforced to have non-zero size if OPT_DNSSEC_VALID is set */  
   if (option_bool(OPT_DNSSEC_VALID))
     blockdata_expand(daemon->cachesize);
-}
-
-void fuzz_blockdata_cleanup() {
-	for (int i = 0; i < 200; i++) {
-		if (total_allocated[i] != NULL) {
-			free(total_allocated[i]);
-		}
-	}
 }
 
 void blockdata_report(void)

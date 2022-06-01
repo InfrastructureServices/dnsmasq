@@ -732,7 +732,9 @@ int enumerate_interfaces(int reset)
   struct auth_zone *zone;
 #endif
   struct server *serv;
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
   int iteration = 0;
+#endif
   
   /* Do this max once per select cycle  - also inhibits netlink socket use
    in TCP child processes. */
@@ -770,10 +772,10 @@ int enumerate_interfaces(int reset)
       }
     
 again:
-  if (iteration > 100) {
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  if (iteration++ > 100)
     return 0;
-  }
-  iteration += 1;
+#endif
   /* Mark interfaces for garbage collection */
   for (iface = daemon->interfaces; iface; iface = iface->next) 
     iface->found = 0;

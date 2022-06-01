@@ -193,19 +193,22 @@ int iface_enumerate(int family, void *parm, int (*callback)())
 			  (struct sockaddr *)&addr, sizeof(addr))));
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  int valval = 0;
   if (errno == 123123)
+    return 0;
 #else
   if (errno != 0)
-#endif
     return 0;
+#endif
     
-  int valval = 0;
   while (1)
     {
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
       valval++;
       if (valval > 300) {
         return -1;
       }
+#endif
       if ((len = netlink_recv(0)) == -1)
 	{
 	  if (errno == ENOBUFS)
