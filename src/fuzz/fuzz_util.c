@@ -50,9 +50,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
       is_name_synthetic(0, t1, &addr1);
 
       if (size > sizeof(struct dns_header)) {
-        hash_questions(data, size, t2);
+	struct dns_header *header = (struct dns_header *) data;
+        hash_questions(header, size, t2);
 
-        rrfilter(data, size, 0);
+        rrfilter(header, size, 0);
       }
     }
 

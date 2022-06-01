@@ -30,9 +30,9 @@ void FuzzAuth(const uint8_t **data2, size_t *size2) {
     new_data[size] = '\0';
     pointer_arr[pointer_idx++] = (void*)new_data;
 
-    time_t now;
-		union mysockaddr peer_addr;
-		answer_auth((struct dns_header *)new_data, new_data + size, size, now, &peer_addr, i1, i2, i3);
+    time_t now = (time_t) i3;
+    union mysockaddr peer_addr;
+    answer_auth((struct dns_header *)new_data, new_data + size, size, now, &peer_addr, i1, i2, i3);
   }
 }
 
@@ -52,6 +52,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   int i = (int)data[0];
   data += 1;
   size -= 1;
+  (void)i;
 
   int succ = init_daemon(&data, &size);
 

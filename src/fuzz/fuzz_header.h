@@ -178,8 +178,8 @@ int fuzz_ioctl(int fd, unsigned long request, void *arg) {
 // Sysytem call wrappers
 static char v = 0;
 ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {
-  
   struct iovec *target = msg->msg_iov;
+  (void)sockfd; (void)flags; 
 
   //printf("recvmsg 1 \n");
   if (syscall_size > 1) {
@@ -193,9 +193,8 @@ ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {
     }
   }
 
-  int j = 0;
   if (msg->msg_control != NULL) {
-    for (;j < CMSG_SPACE(sizeof(struct in_pktinfo)); j++)
+    for (size_t j=0; j < CMSG_SPACE(sizeof(struct in_pktinfo)); j++)
     {
       if (syscall_size > 0 && syscall_data != NULL) {
         ((char*)msg->msg_control)[j] = *syscall_data;
@@ -208,7 +207,7 @@ ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {
     }
   }
 
-  int i = 0;
+  size_t i = 0;
   for (; i < target->iov_len; i++) {
     if (syscall_size > 0 && syscall_data != NULL) {
       ((char*)target->iov_base)[i] = *syscall_data;
@@ -224,7 +223,7 @@ ssize_t fuzz_recvmsg(int sockfd, struct msghdr *msg, int flags) {
     memset(msg->msg_name, 0, msg->msg_namelen);
   }
 
-  return i;
+  return (int)i;
 }
 
 
@@ -386,11 +385,11 @@ int init_daemon(const uint8_t **data2, size_t *size2) {
   CLEAN_IF_NULL(db_interface)
 
   if (strlen(db_interface) > IF_NAMESIZE) {
-    for (int i = 0; i < IF_NAMESIZE; i++) {
+    for (size_t i = 0; i < IF_NAMESIZE; i++) {
       db->iface[i] = db_interface[i];
     }
   } else {
-    for (int i = 0; i < strlen(db_interface); i++) {
+    for (size_t i = 0; i < strlen(db_interface); i++) {
       db->iface[i] = db_interface[i];
     }
   }
@@ -404,11 +403,11 @@ int init_daemon(const uint8_t **data2, size_t *size2) {
   CLEAN_IF_NULL(db_alias_interface)
 
   if (strlen(db_alias_interface) > IF_NAMESIZE) {
-    for (int i = 0; i < IF_NAMESIZE; i++) {
+    for (size_t i = 0; i < IF_NAMESIZE; i++) {
       db_alias->iface[i] = db_alias_interface[i];
     }
   } else {
-    for (int i = 0; i < strlen(db_alias_interface); i++) {
+    for (size_t i = 0; i < strlen(db_alias_interface); i++) {
       db_alias->iface[i] = db_alias_interface[i];
     }
   }

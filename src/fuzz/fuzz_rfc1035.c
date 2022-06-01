@@ -33,7 +33,7 @@ void FuzzExtractTheAddress(const uint8_t **data2, size_t *size2) {
     memcpy(new_data, data, size);
     pointer_arr[pointer_idx++] = (void*)new_data;
     
-    time_t now; 
+    time_t now = *((time_t *)data);
     int doctored = 0;
     extract_addresses((struct dns_header *)new_data, size, new_name, now, NULL, NULL, is_sign, check_rebind, 0, secure, &doctored);
   }
@@ -47,15 +47,15 @@ void FuzzAnswerTheRequest(const uint8_t **data2, size_t *size2) {
   const uint8_t *data = *data2;
   size_t size = *size2;
 
-  struct in_addr local_addr;
-  struct in_addr local_netmask;
-  time_t now;
+  struct in_addr local_addr = {0};
+  struct in_addr local_netmask = {0};
 
   int i1 = get_int(&data, &size);
   int i2 = get_int(&data, &size);
   int i3 = get_int(&data, &size);
 
   if (size > (sizeof(struct dns_header) +50)) {
+    time_t now = (time_t) i3;
     char *new_data = malloc(size);
     memset(new_data, 0, size);
     memcpy(new_data, data, size);
@@ -98,7 +98,7 @@ void FuzzCheckLocalDomain(const uint8_t **data2, size_t *size2) {
     new_data[size] = '\0';
     pointer_arr[pointer_idx++] = (void*)new_data;
 
-    time_t now;
+    time_t now = *((time_t *) data);
     check_for_local_domain(new_data, now);
 }
 
@@ -153,15 +153,16 @@ void FuzzResizePacket(const uint8_t **data2, size_t *size2) {
   const uint8_t *data = *data2;
   size_t size = *size2;
   char *new_data = NULL;
-  struct dns_header *header;
   size_t plen = 0;
   unsigned char *pheader = NULL;
   unsigned char *udpsz = NULL;
   int is_sign = 0;
+  struct dns_header *header;
 
   /* Why 50? Is that computed from something? */
   if (size <= (sizeof(struct dns_header) + 50))
     {
+      header = (struct dns_header *)data;
       resize_packet(header, size, NULL, 0);
       return;
     }
@@ -211,7 +212,7 @@ void FuzzCheckForBogusWildcard(const uint8_t **data2, size_t *size2) {
     new_data[size] = '\0';
     pointer_arr[pointer_idx++] = (void*)new_data;
 
-    time_t now;
+    time_t now = *((time_t *)data);
     check_for_bogus_wildcard((struct dns_header *)new_data, size, nname, now);
   }
 }

@@ -18,7 +18,7 @@ limitations under the License.
 void FuzzDhcp(const uint8_t **data2, size_t *size2) {
   const uint8_t *data = *data2;
   size_t size = *size2;
-  time_t now;
+  time_t now = *((time_t *) data);
   int pxe_fd = 0;
 
   struct iovec *dhpa = malloc(sizeof(struct iovec));
@@ -59,7 +59,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   gb_init();
 
   // Get a value we can use to decide which target to hit.
-  int i = (int)data[0];
   data += 1;
   size -= 1;
 
