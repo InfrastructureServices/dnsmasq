@@ -131,6 +131,9 @@ HAVE_CRYPTOHASH
 HAVE_DNSSEC
    include DNSSEC validator.
 
+HAVE_GOST
+   include DNSSEC algorithm 12 (ECCGOST) support
+
 HAVE_DUMPFILE
    include code to dump packets to a libpcap-format file for debugging.
 
@@ -198,6 +201,7 @@ RESOLVFILE
 /* #define HAVE_CONNTRACK */
 /* #define HAVE_CRYPTOHASH */
 /* #define HAVE_DNSSEC */
+/* #define HAVE_GOST */
 /* #define HAVE_NFTSET */
 
 /* Default locations for important system files. */
@@ -442,6 +446,10 @@ static char *compile_opts =
 "no-"
 #endif
 "DNSSEC "
+#ifndef HAVE_GOST
+"no-"
+#endif
+"gost "
 #ifdef NO_ID
 "no-ID "
 #endif

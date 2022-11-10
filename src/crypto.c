@@ -39,7 +39,7 @@
 #if MIN_VERSION(3, 1)
 #include <nettle/eddsa.h>
 #endif
-#if MIN_VERSION(3, 6)
+#if defined(HAVE_GOST) && MIN_VERSION(3, 6)
 #  include <nettle/gostdsa.h>
 #endif
 
@@ -281,7 +281,7 @@ static int dnsmasq_ecdsa_verify(struct blockdata *key_data, unsigned int key_len
   return nettle_ecdsa_verify(key, digest_len, digest, sig_struct);
 }
 
-#if MIN_VERSION(3, 6)
+#if defined(HAVE_GOST) && MIN_VERSION(3, 6)
 static int dnsmasq_gostdsa_verify(struct blockdata *key_data, unsigned int key_len, 
 				  unsigned char *sig, size_t sig_len,
 				  unsigned char *digest, size_t digest_len, int algo)
@@ -381,7 +381,7 @@ static int (*verify_func(int algo))(struct blockdata *key_data, unsigned int key
     case 5: case 7: case 8: case 10:
       return dnsmasq_rsa_verify;
 
-#if MIN_VERSION(3, 6)
+#if defined(HAVE_GOST) && MIN_VERSION(3, 6)
     case 12:
       return dnsmasq_gostdsa_verify;
 #endif
@@ -444,7 +444,9 @@ char *algo_digest_name(int algo)
     case 7: return "sha1";        /* RSASHA1-NSEC3-SHA1 */
     case 8: return "sha256";      /* RSA/SHA-256 */
     case 10: return "sha512";     /* RSA/SHA-512 */
+#ifdef HAVE_GOST
     case 12: return "gosthash94"; /* ECC-GOST */
+#endif
     case 13: return "sha256";     /* ECDSAP256SHA256 */
     case 14: return "sha384";     /* ECDSAP384SHA384 */ 	
     case 15: return "null_hash";  /* ED25519 */
