@@ -1294,11 +1294,12 @@ extern struct daemon {
 } *daemon;
 
 struct server_details {
-  union mysockaddr *addr, *source_addr;
+  union mysockaddr addr, source_addr;
+  char interface[IF_NAMESIZE+1];
   struct addrinfo *hostinfo, *orig_hostinfo;
-  char *interface, *source, *scope_id, *interface_opt;
+  char *source, *scope_id, *interface_opt;
   int serv_port, source_port, addr_type, scope_index, valid;
-  u16 *flags;
+  u16 flags;
 };
 
 /* cache.c */
@@ -1860,3 +1861,6 @@ int add_update_server(int flags,
 		      const char *interface,
 		      const char *domain,
 		      union all_addr *local_addr); 
+int add_update_server_details(struct server_details *sdetails,
+		      const char *domain,
+		      union all_addr *local_addr);

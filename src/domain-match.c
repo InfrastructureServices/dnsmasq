@@ -730,3 +730,11 @@ int add_update_server(int flags,
   return 1;
 }
 
+int add_update_server_details(struct server_details *sdetails,
+		      const char *domain,
+		      union all_addr *local_addr)
+{
+  char *interface = (sdetails->interface[0]) ? sdetails->interface : NULL;
+  return add_update_server(sdetails->flags, &sdetails->addr, &sdetails->source_addr,
+			   interface, domain, local_addr);
+}

@@ -869,8 +869,7 @@ char *parse_server(char *arg, struct server_details *sdetails)
      
   if (strcmp(arg, "#") == 0)
     {
-      if (sdetails->flags)
-	*sdetails->flags |= SERV_USE_RESOLV;
+      sdetails->flags |= SERV_USE_RESOLV;
       sdetails->addr_type = AF_LOCAL;
       sdetails->valid = 1;
       return NULL;
@@ -901,9 +900,9 @@ char *parse_server(char *arg, struct server_details *sdetails)
       }
   }
 
-  if (inet_pton(AF_INET, arg, &sdetails->addr->in.sin_addr) > 0)
+  if (inet_pton(AF_INET, arg, &sdetails->addr.in.sin_addr) > 0)
       sdetails->addr_type = AF_INET;
-  else if (inet_pton(AF_INET6, arg, &sdetails->addr->in6.sin6_addr) > 0)
+  else if (inet_pton(AF_INET6, arg, &sdetails->addr.in6.sin6_addr) > 0)
       sdetails->addr_type = AF_INET6;
   else 
     {
@@ -966,24 +965,23 @@ char *parse_server_addr(struct server_details *sdetails)
 {
   if (sdetails->addr_type == AF_INET)
     {
-      sdetails->addr->in.sin_port = htons(sdetails->serv_port);
-      sdetails->addr->sa.sa_family = sdetails->source_addr->sa.sa_family = AF_INET;
+      sdetails->addr.in.sin_port = htons(sdetails->serv_port);
+      sdetails->addr.sa.sa_family = sdetails->source_addr.sa.sa_family = AF_INET;
 #ifdef HAVE_SOCKADDR_SA_LEN
-      sdetails->source_addr->in.sin_len = sdetails->addr->in.sin_len = sizeof(struct sockaddr_in);
+      sdetails->source_addr.in.sin_len = sdetails->addr->in.sin_len = sizeof(struct sockaddr_in);
 #endif
-      sdetails->source_addr->in.sin_addr.s_addr = INADDR_ANY;
-      sdetails->source_addr->in.sin_port = htons(daemon->query_port);
+      sdetails->source_addr.in.sin_addr.s_addr = INADDR_ANY;
+      sdetails->source_addr.in.sin_port = htons(daemon->query_port);
       
       if (sdetails->source)
 	{
-	  if (sdetails->flags)
-	    *sdetails->flags |= SERV_HAS_SOURCE;
-	  sdetails->source_addr->in.sin_port = htons(sdetails->source_port);
-	  if (inet_pton(AF_INET, sdetails->source, &sdetails->source_addr->in.sin_addr) == 0)
+	  sdetails->flags |= SERV_HAS_SOURCE;
+	  sdetails->source_addr.in.sin_port = htons(sdetails->source_port);
+	  if (inet_pton(AF_INET, sdetails->source, &sdetails->source_addr.in.sin_addr) == 0)
 	    {
-	      if (inet_pton(AF_INET6, sdetails->source, &sdetails->source_addr->in6.sin6_addr) == 1)
+	      if (inet_pton(AF_INET6, sdetails->source, &sdetails->source_addr.in6.sin6_addr) == 1)
 		{
-		  sdetails->source_addr->sa.sa_family = AF_INET6;
+		  sdetails->source_addr.sa.sa_family = AF_INET6;
 		  /* When resolving a server IP by hostname, we can simply skip mismatching
 		     server / source IP pairs. Otherwise, when an IP address is given directly,
 		     this is a fatal error. */
@@ -996,7 +994,7 @@ char *parse_server_addr(struct server_details *sdetails)
 		  if (sdetails->interface_opt)
 		    return _("interface can only be specified once");
 
-		  sdetails->source_addr->in.sin_addr.s_addr = INADDR_ANY;
+		  sdetails->source_addr.in.sin_addr.s_addr = INADDR_ANY;
 		  safe_strncpy(sdetails->interface, sdetails->source, IF_NAMESIZE);
 #else
 		  return _("interface binding not supported");
@@ -1010,26 +1008,25 @@ char *parse_server_addr(struct server_details *sdetails)
       if (sdetails->scope_id && (sdetails->scope_index = if_nametoindex(sdetails->scope_id)) == 0)
 	return _("bad interface name");
 
-      sdetails->addr->in6.sin6_port = htons(sdetails->serv_port);
-      sdetails->addr->in6.sin6_scope_id = sdetails->scope_index;
-      sdetails->source_addr->in6.sin6_addr = in6addr_any;
-      sdetails->source_addr->in6.sin6_port = htons(daemon->query_port);
-      sdetails->source_addr->in6.sin6_scope_id = 0;
-      sdetails->addr->sa.sa_family = sdetails->source_addr->sa.sa_family = AF_INET6;
-      sdetails->addr->in6.sin6_flowinfo = sdetails->source_addr->in6.sin6_flowinfo = 0;
+      sdetails->addr.in6.sin6_port = htons(sdetails->serv_port);
+      sdetails->addr.in6.sin6_scope_id = sdetails->scope_index;
+      sdetails->source_addr.in6.sin6_addr = in6addr_any;
+      sdetails->source_addr.in6.sin6_port = htons(daemon->query_port);
+      sdetails->source_addr.in6.sin6_scope_id = 0;
+      sdetails->addr.sa.sa_family = sdetails->source_addr.sa.sa_family = AF_INET6;
+      sdetails->addr.in6.sin6_flowinfo = sdetails->source_addr.in6.sin6_flowinfo = 0;
 #ifdef HAVE_SOCKADDR_SA_LEN
-      sdetails->addr->in6.sin6_len = sdetails->source_addr->in6.sin6_len = sizeof(sdetails->addr->in6);
+      sdetails->addr.in6.sin6_len = sdetails->source_addr.in6.sin6_len = sizeof(sdetails->addr->in6);
 #endif
       if (sdetails->source)
 	{
-	  if (sdetails->flags)
-	    *sdetails->flags |= SERV_HAS_SOURCE;
-	  sdetails->source_addr->in6.sin6_port = htons(sdetails->source_port);
-	  if (inet_pton(AF_INET6, sdetails->source, &sdetails->source_addr->in6.sin6_addr) == 0)
+	  sdetails->flags |= SERV_HAS_SOURCE;
+	  sdetails->source_addr.in6.sin6_port = htons(sdetails->source_port);
+	  if (inet_pton(AF_INET6, sdetails->source, &sdetails->source_addr.in6.sin6_addr) == 0)
 	    {
-	      if (inet_pton(AF_INET, sdetails->source, &sdetails->source_addr->in.sin_addr) == 1)
+	      if (inet_pton(AF_INET, sdetails->source, &sdetails->source_addr.in.sin_addr) == 1)
 		{
-		  sdetails->source_addr->sa.sa_family = AF_INET;
+		  sdetails->source_addr.sa.sa_family = AF_INET;
 		  /* When resolving a server IP by hostname, we can simply skip mismatching
 		     server / source IP pairs. Otherwise, when an IP address is given directly,
 		     this is a fatal error. */
@@ -1042,7 +1039,7 @@ char *parse_server_addr(struct server_details *sdetails)
 		  if (sdetails->interface_opt)
 		  return _("interface can only be specified once");
 
-		  sdetails->source_addr->in6.sin6_addr = in6addr_any;
+		  sdetails->source_addr.in6.sin6_addr = in6addr_any;
 		  safe_strncpy(sdetails->interface, sdetails->source, IF_NAMESIZE);
 #else
 		  return _("interface binding not supported");
@@ -1067,13 +1064,13 @@ int parse_server_next(struct server_details *sdetails)
 
       /* Get address */
       if (sdetails->addr_type == AF_INET)
-	memcpy(&sdetails->addr->in.sin_addr,
+	memcpy(&sdetails->addr.in.sin_addr,
 		&((struct sockaddr_in *) sdetails->hostinfo->ai_addr)->sin_addr,
-		sizeof(sdetails->addr->in.sin_addr));
+		sizeof(sdetails->addr.in.sin_addr));
       else if (sdetails->addr_type == AF_INET6)
-	memcpy(&sdetails->addr->in6.sin6_addr,
+	memcpy(&sdetails->addr.in6.sin6_addr,
 		&((struct sockaddr_in6 *) sdetails->hostinfo->ai_addr)->sin6_addr,
-		sizeof(sdetails->addr->in6.sin6_addr));
+		sizeof(sdetails->addr.in6.sin6_addr));
 
       /* Iterate to the next available address */
       sdetails->valid = sdetails->hostinfo->ai_next != NULL;
@@ -1090,31 +1087,65 @@ int parse_server_next(struct server_details *sdetails)
   return 0;
 }
 
-static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int size)
+static char *add_server_rev(struct server_details *sdetails,
+		      const char *domain,
+		      union all_addr *local_addr)
 {
-  int i, j;
-  char *string;
-  int msize;
-  u16 flags = 0;
-  char domain[29]; /* strlen("xxx.yyy.zzz.ttt.in-addr.arpa")+1 */
-  union mysockaddr serv_addr, source_addr;
-  char interface[IF_NAMESIZE+1];
-  int count = 1, rem, addrbytes, addrbits;
-  struct server_details sdetails;
+  if (sdetails->flags & SERV_LITERAL_ADDRESS)
+    {
+      if (!add_update_server_details(sdetails, domain, local_addr))
+	return  _("error");
+    }
+  else
+    {
+      char *string;
 
-  memset(&sdetails, 0, sizeof(struct server_details));
-  sdetails.addr = &serv_addr;
-  sdetails.source_addr = &source_addr;
-  sdetails.interface = interface;
-  sdetails.flags = &flags;
-    
+      while (parse_server_next(sdetails))
+	{
+	  if ((string = parse_server_addr(sdetails)))
+	    return string;
+	      
+	  if (!add_update_server_details(sdetails, domain, local_addr))
+	    return  _("error");
+	}
+
+      if (sdetails->orig_hostinfo)
+	{
+	  freeaddrinfo(sdetails->orig_hostinfo);
+	  sdetails->orig_hostinfo = NULL;
+	}
+    }
+  return NULL;
+}
+
+static char *parse_server_rev(int from_file, char *server, struct server_details *sdetails)
+{
+  char *string;
+  memset(sdetails, 0, sizeof(struct server_details));
+
   if (!server)
-    flags = SERV_LITERAL_ADDRESS;
-  else if ((string = parse_server(server, &sdetails)))
+    sdetails->flags = SERV_LITERAL_ADDRESS;
+  else if ((string = parse_server(server, sdetails)))
     return string;
   
   if (from_file)
-    flags |= SERV_FROM_FILE;
+    sdetails->flags |= SERV_FROM_FILE;
+
+  return NULL;
+}
+
+static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int size)
+{
+  int i, j;
+  char *string, *ret = NULL;
+  int msize;
+  char domain[29]; /* strlen("xxx.yyy.zzz.ttt.in-addr.arpa")+1 */
+  int count = 1, rem, addrbytes, addrbits;
+  struct server_details sdetails;
+
+  ret = parse_server_rev(from_file, server, &sdetails);
+  if (ret)
+    return ret;
  
   rem = size & 0x7;
   addrbytes = (32 - size) >> 3;
@@ -1131,7 +1162,7 @@ static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int
   if (rem != 0)
     count = 1 << (8 - rem);
   
-  for (i = 0; i < count; i++)
+  for (i = 0; !ret && i < count; i++)
     {
       *domain = 0;
       string = domain;
@@ -1149,56 +1180,25 @@ static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int
       
       sprintf(string, "in-addr.arpa");
 
-      if (flags & SERV_LITERAL_ADDRESS)
-	{
-	  if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-	    return  _("error");
-	}
-      else
-	{
-	  while (parse_server_next(&sdetails))
-	    {
-	      if ((string = parse_server_addr(&sdetails)))
-		return string;
-	      
-	      if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-		return  _("error");
-	    }
-
-	  if (sdetails.orig_hostinfo)
-	    freeaddrinfo(sdetails.orig_hostinfo);
-	}
+      ret = add_server_rev(&sdetails, domain, NULL);
     }
   
-  return NULL;
+  return ret;
 }
 
 static char *domain_rev6(int from_file, char *server, struct in6_addr *addr6, int size)
 {
   int i, j;
-  char *string;
+  char *string, *ret = NULL;
   int msize;
-  u16 flags = 0;
   char domain[73]; /* strlen("32*<n.>ip6.arpa")+1 */
-  union mysockaddr serv_addr, source_addr;
-  char interface[IF_NAMESIZE+1];
   int count = 1, rem, addrbytes, addrbits;
   struct server_details sdetails;
   
-  memset(&sdetails, 0, sizeof(struct server_details));
-  sdetails.addr = &serv_addr;
-  sdetails.source_addr = &source_addr;
-  sdetails.interface = interface;
-  sdetails.flags = &flags;
-   
-  if (!server)
-    flags = SERV_LITERAL_ADDRESS;
-  else if ((string = parse_server(server, &sdetails)))
-    return string;
+  ret = parse_server_rev(from_file, server, &sdetails);
+  if (ret)
+    return ret;
 
-  if (from_file)
-    flags |= SERV_FROM_FILE;
-  
   rem = size & 0x3;
   addrbytes = (128 - size) >> 3;
   addrbits = (128 - size) & 7;
@@ -1214,7 +1214,7 @@ static char *domain_rev6(int from_file, char *server, struct in6_addr *addr6, in
   if (rem != 0)
     count = 1 << (4 - rem);
       
-  for (i = 0; i < count; i++)
+  for (i = 0; !ret && i < count; i++)
     {
       *domain = 0;
       string = domain;
@@ -1234,28 +1234,10 @@ static char *domain_rev6(int from_file, char *server, struct in6_addr *addr6, in
       
       sprintf(string, "ip6.arpa");
 
-      if (flags & SERV_LITERAL_ADDRESS)
-	{
-	  if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-	    return  _("error");
-	}
-      else
-	{
-	  while (parse_server_next(&sdetails))
-	    {
-	      if ((string = parse_server_addr(&sdetails)))
-		return string;
-	      
-	      if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-		return  _("error");
-	    }
-
-	  if (sdetails.orig_hostinfo)
-	    freeaddrinfo(sdetails.orig_hostinfo);
-	}
+      ret = add_server_rev(&sdetails, domain, NULL);
     }
   
-  return NULL;
+  return ret;
 }
 
 #ifdef HAVE_DHCP
@@ -2969,16 +2951,10 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	u16 flags = 0;
 	char *err;
 	union all_addr addr;
-	union mysockaddr serv_addr, source_addr;
-	char interface[IF_NAMESIZE+1];
 	struct server_details sdetails;
 
 	memset(&sdetails, 0, sizeof(struct server_details));
-	sdetails.addr = &serv_addr;
-	sdetails.source_addr = &source_addr;
-	sdetails.interface = interface;
-	sdetails.flags = &flags;
-			
+
 	unhide_metas(arg);
 	
 	/* split the domain args, if any and skip to the end of them. */
@@ -3027,7 +3003,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	      ret_err(err);
 
 	    /* When source is set only use DNS records of the same type and skip all others */
-	    if (flags & SERV_HAS_SOURCE && sdetails.addr_type != sdetails.source_addr->sa.sa_family)
+	    if (flags & SERV_HAS_SOURCE && sdetails.addr_type != sdetails.source_addr.sa.sa_family)
 	      continue;
 
 	    while (1)
@@ -3044,8 +3020,9 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 		    if (option == 'A' && cur_domain[0] == '#' && cur_domain[1] == 0)
 		      cur_domain[0] = 0;
 		  }
-		
-		if (!add_update_server(flags, sdetails.addr, sdetails.source_addr, sdetails.interface, cur_domain, &addr))
+
+		sdetails.flags = flags;
+		if (!add_update_server_details(&sdetails, cur_domain, &addr))
 		  ret_err(gen_err);
 		
 		if (!lastdomain || cur_domain == lastdomain)
@@ -3059,7 +3036,10 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	  }
 
 	if (sdetails.orig_hostinfo)
-	  freeaddrinfo(sdetails.orig_hostinfo);
+	  {
+	    freeaddrinfo(sdetails.orig_hostinfo);
+	    sdetails.orig_hostinfo = NULL;
+	  }
 	
      	break;
       }

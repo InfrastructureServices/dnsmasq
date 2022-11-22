@@ -288,15 +288,8 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
   while (dbus_message_iter_get_arg_type(&array_iter) != DBUS_TYPE_INVALID)
     {
       const char *str = NULL;
-      union  mysockaddr addr, source_addr;
-      u16 flags = 0;
-      char interface[IF_NAMESIZE];
       char *str_addr, *str_domain = NULL;
-      struct server_details sdetails = { 0 };
-      sdetails.addr = &addr;
-      sdetails.source_addr = &source_addr;
-      sdetails.interface = interface;
-      sdetails.flags = &flags;
+      struct server_details sdetails = { .flags = SERV_FROM_DBUS, };
 
       if (strings)
 	{
@@ -393,7 +386,10 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
 	      p = NULL;
 	    
 	     if (strings && strlen(str_addr) == 0)
-	       add_update_server(SERV_LITERAL_ADDRESS | SERV_FROM_DBUS, &addr, &source_addr, interface, str_domain, NULL);
+	       {
+		 sdetails.flags |= SERV_LITERAL_ADDRESS;
+	         add_update_server_details(&sdetails, str_domain, NULL);
+	       }
 	     else
 	       {
 		 if ((addr_err = parse_server(str_addr, &sdetails)))
@@ -414,7 +410,7 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
 			 break;
 		       }
 		     
-		     add_update_server(flags | SERV_FROM_DBUS, &addr, &source_addr, interface, str_domain, NULL);
+	             add_update_server_details(&sdetails, str_domain, NULL);
 		   }
 	       }
 	  } while ((str_domain = p));
@@ -450,19 +446,22 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
 		  }
 		
 		/* 0.0.0.0 for server address == NULL, for Dbus */
-		if (addr.in.sin_family == AF_INET &&
-		    addr.in.sin_addr.s_addr == 0)
-		  flags |= SERV_LITERAL_ADDRESS;
+		if (sdetails.addr.in.sin_family == AF_INET &&
+		    sdetails.addr.in.sin_addr.s_addr == 0)
+		  sdetails.flags |= SERV_LITERAL_ADDRESS;
 		else
-		  flags &= ~SERV_LITERAL_ADDRESS;
+		  sdetails.flags &= ~SERV_LITERAL_ADDRESS;
 		
-		add_update_server(flags | SERV_FROM_DBUS, &addr, &source_addr, interface, str, NULL);
+	        add_update_server_details(&sdetails, str, NULL);
 	      }
 	  } while (dbus_message_iter_get_arg_type(&string_iter) == DBUS_TYPE_STRING);
 	}
       
       if (sdetails.orig_hostinfo)
-	freeaddrinfo(sdetails.orig_hostinfo);
+	{
+	  freeaddrinfo(sdetails.orig_hostinfo);
+	  sdetails.orig_hostinfo = NULL;
+	}
       
       /* jump to next element in outer array */
       dbus_message_iter_next(&array_iter);
