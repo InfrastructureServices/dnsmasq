@@ -468,7 +468,10 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
 	}
       
       if (sdetails.orig_hostinfo)
-	freeaddrinfo(sdetails.orig_hostinfo);
+	{
+	  freeaddrinfo(sdetails.orig_hostinfo);
+	  sdetails.orig_hostinfo = NULL;
+	}
       
       /* jump to next element in outer array */
       dbus_message_iter_next(&array_iter);
