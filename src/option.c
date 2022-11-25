@@ -1184,7 +1184,10 @@ static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int
 	    }
 
 	  if (sdetails.orig_hostinfo)
-	    freeaddrinfo(sdetails.orig_hostinfo);
+	    {
+	      freeaddrinfo(sdetails.orig_hostinfo);
+	      sdetails.orig_hostinfo = NULL;
+	    }
 	}
     }
   
@@ -1272,7 +1275,10 @@ static char *domain_rev6(int from_file, char *server, struct in6_addr *addr6, in
 	    }
 
 	  if (sdetails.orig_hostinfo)
-	    freeaddrinfo(sdetails.orig_hostinfo);
+	    {
+	      freeaddrinfo(sdetails.orig_hostinfo);
+	      sdetails.orig_hostinfo = NULL;
+	    }
 	}
     }
   
@@ -3090,7 +3096,10 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	  }
 
 	if (sdetails.orig_hostinfo)
-	  freeaddrinfo(sdetails.orig_hostinfo);
+	  {
+	    freeaddrinfo(sdetails.orig_hostinfo);
+	    sdetails.orig_hostinfo = NULL;
+	  }
 	
      	break;
       }
