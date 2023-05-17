@@ -190,6 +190,7 @@ struct myoption {
 #define LOPT_FILTER_RR     381
 #define LOPT_NO_DHCP6      382
 #define LOPT_NO_DHCP4      383
+#define LOPT_TCP_TIMEOUT   384
 
 #ifdef HAVE_GETOPT_LONG
 static const struct option opts[] =  
@@ -279,6 +280,7 @@ static const struct myoption opts[] =
     { "leasefile-ro", 0, 0, '9' },
     { "script-on-renewal", 0, 0, LOPT_SCRIPT_TIME},
     { "dns-forward-max", 1, 0, '0' },
+    { "dns-tcp-timeout", 1, 0, LOPT_TCP_TIMEOUT },
     { "clear-on-reload", 0, 0, LOPT_RELOAD },
     { "dhcp-ignore-names", 2, 0, LOPT_NO_NAMES },
     { "enable-tftp", 2, 0, LOPT_TFTP },
@@ -3391,7 +3393,12 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
     case '0':  /* --dns-forward-max */
       if (!atoi_check(arg, &daemon->ftabsize))
 	ret_err(gen_err);
-      break;  
+      break;
+
+    case LOPT_TCP_TIMEOUT: /* --dns-tcp-timeout */
+      if (!atoi_check(arg, &daemon->tcp_timeout))
+	 ret_err(gen_err);
+      break;
     
     case 'q': /* --log-queries */
       set_option_bool(OPT_LOG);
@@ -5833,6 +5840,7 @@ void read_opts(int argc, char **argv, char *compile_opts)
   daemon->soa_expiry = SOA_EXPIRY;
   daemon->randport_limit = 1;
   daemon->host_index = SRC_AH;
+  daemon->tcp_timeout = TCP_TIMEOUT;
   
   /* See comment above make_servers(). Optimises server-read code. */
   mark_servers(0);

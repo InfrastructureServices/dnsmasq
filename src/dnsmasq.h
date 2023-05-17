@@ -1256,6 +1256,7 @@ extern struct daemon {
   int tcp_pipes[MAX_PROCS];
   int pipe_to_parent;
   int numrrand;
+  int tcp_timeout;
   struct randfd *randomsocks;
   struct randfd_list *rfl_spare, *rfl_poll;
   int v6pktinfo; 

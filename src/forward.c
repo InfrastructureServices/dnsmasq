@@ -1929,8 +1929,14 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	  /* Copy connection mark of incoming query to outgoing connection. */
 	  if (have_mark)
 	    setsockopt(serv->tcpfd, SOL_SOCKET, SO_MARK, &mark, sizeof(unsigned int));
-#endif			  
-	  
+#endif
+
+	  if (daemon->tcp_timeout>0)
+	    {
+	      struct timeval tv = {daemon->tcp_timeout, 0};
+	      setsockopt(serv->tcpfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	    }
+
 	  if ((!local_bind(serv->tcpfd,  &serv->source_addr, serv->interface, 0, 1)))
 	    {
 	      close(serv->tcpfd);
