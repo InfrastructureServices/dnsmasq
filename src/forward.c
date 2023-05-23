@@ -581,10 +581,8 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
       
       if (oph)
 	{
-	  u16 swap = htons((u16)ede);
-
 	  if (ede != EDE_UNSET)
-	    plen = add_pseudoheader(header, plen, (unsigned char *)limit, daemon->edns_pktsz, EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
+	    plen = add_pseudoheader_ede(header, plen, (unsigned char *)limit, daemon->edns_pktsz, ede, do_bit, 0);
 	  else
 	    plen = add_pseudoheader(header, plen, (unsigned char *)limit, daemon->edns_pktsz, 0, NULL, 0, do_bit, 0);
 	}
@@ -873,10 +871,7 @@ static size_t process_reply(struct dns_header *header, time_t now, struct server
   n = resize_packet(header, n, pheader, plen);
 
   if (pheader && ede != EDE_UNSET)
-    {
-      u16 swap = htons((u16)ede);
-      n = add_pseudoheader(header, n, limit, daemon->edns_pktsz, EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 1);
-    }
+    n = add_pseudoheader_ede(header, n, limit, daemon->edns_pktsz, ede, do_bit, 1);
 
   if (RCODE(header) == NXDOMAIN)
     server->nxdomain_replies++;
@@ -1440,6 +1435,57 @@ static size_t answer_disallowed(struct dns_header *header, size_t qlen, u32 mark
 }
 #endif
 
+/* We can be configured to only accept queries from at-most-one-hop-away addresses. */
+static int is_local_network_address(union mysockaddr *source_addr)
+{
+  struct addrlist *addr = daemon->interface_addrs;
+
+  if (source_addr->sa.sa_family == AF_INET6)
+    {
+      for (; addr; addr = addr->next)
+	if ((addr->flags & ADDRLIST_IPV6) &&
+	    is_same_net6(&addr->addr.addr6, &source_addr->in6.sin6_addr, addr->prefixlen))
+	  break;
+    }
+  else
+    {
+      struct in_addr netmask;
+      for (; addr; addr = addr->next)
+	{
+	  netmask.s_addr = htonl(~(in_addr_t)0 << (32 - addr->prefixlen));
+	  if (!(addr->flags & ADDRLIST_IPV6) &&
+	      is_same_net(addr->addr.addr4, source_addr->in.sin_addr, netmask))
+	    break;
+	}
+    }
+  if (!addr)
+    {
+      static int warned = 0;
+      if (!warned)
+	{
+	  prettyprint_addr(source_addr, daemon->addrbuff);
+	  my_syslog(LOG_WARNING, _("ignoring query from non-local network %s (logged only once)"), daemon->addrbuff);
+	  warned = 1;
+	}
+      return 0;
+    }
+  return 1;
+}
+
+#ifdef HAVE_AUTH
+/* find queries for zones we're authoritative for, and answer them directly */
+static int is_auth_zone(char *name)
+{
+  struct auth_zone *zone;
+
+  if (!option_bool(OPT_LOCALISE))
+    for (zone = daemon->auth_zones; zone; zone = zone->next)
+      if (in_zone(zone, name, NULL))
+	return 1;
+  return 0;
+}
+#endif
+
 void receive_query(struct listener *listen, time_t now)
 {
   struct dns_header *header = (struct dns_header *)daemon->packet;
@@ -1537,40 +1583,8 @@ void receive_query(struct listener *listen, time_t now)
     }
   
   /* We can be configured to only accept queries from at-most-one-hop-away addresses. */
-  if (option_bool(OPT_LOCAL_SERVICE))
-    {
-      struct addrlist *addr;
-
-      if (family == AF_INET6) 
-	{
-	  for (addr = daemon->interface_addrs; addr; addr = addr->next)
-	    if ((addr->flags & ADDRLIST_IPV6) &&
-		is_same_net6(&addr->addr.addr6, &source_addr.in6.sin6_addr, addr->prefixlen))
-	      break;
-	}
-      else
-	{
-	  struct in_addr netmask;
-	  for (addr = daemon->interface_addrs; addr; addr = addr->next)
-	    {
-	      netmask.s_addr = htonl(~(in_addr_t)0 << (32 - addr->prefixlen));
-	      if (!(addr->flags & ADDRLIST_IPV6) &&
-		  is_same_net(addr->addr.addr4, source_addr.in.sin_addr, netmask))
-		break;
-	    }
-	}
-      if (!addr)
-	{
-	  static int warned = 0;
-	  if (!warned)
-	    {
-	      prettyprint_addr(&source_addr, daemon->addrbuff);
-	      my_syslog(LOG_WARNING, _("ignoring query from non-local network %s (logged only once)"), daemon->addrbuff);
-	      warned = 1;
-	    }
-	  return;
-	}
-    }
+  if (option_bool(OPT_LOCAL_SERVICE) && !is_local_network_address(&source_addr))
+    return;
 		
   if (check_dst)
     {
@@ -1694,7 +1708,6 @@ void receive_query(struct listener *listen, time_t now)
   if (extract_request(header, (size_t)n, daemon->namebuff, &type))
     {
 #ifdef HAVE_AUTH
-      struct auth_zone *zone;
 #endif
       log_query_mysockaddr(F_QUERY | F_FORWARD, daemon->namebuff,
 			   &source_addr, auth_dns ? "auth" : "query", type);
@@ -1704,15 +1717,8 @@ void receive_query(struct listener *listen, time_t now)
 #endif
 
 #ifdef HAVE_AUTH
-      /* find queries for zones we're authoritative for, and answer them directly */
-      if (!auth_dns && !option_bool(OPT_LOCALISE))
-	for (zone = daemon->auth_zones; zone; zone = zone->next)
-	  if (in_zone(zone, daemon->namebuff, NULL))
-	    {
-	      auth_dns = 1;
-	      local_auth = 1;
-	      break;
-	    }
+      if (!auth_dns && is_auth_zone(daemon->namebuff))
+	auth_dns = local_auth = 1;
 #endif
       
 #ifdef HAVE_LOOP
@@ -1759,14 +1765,12 @@ void receive_query(struct listener *listen, time_t now)
 #ifdef HAVE_CONNTRACK
   else if (!allowed)
     {
-      u16 swap = htons(EDE_BLOCKED);
-
       m = answer_disallowed(header, (size_t)n, (u32)mark, is_single_query ? daemon->namebuff : NULL);
       
       if (have_pseudoheader && m != 0)
-	m = add_pseudoheader(header,  m,  ((unsigned char *) header) + udp_size, daemon->edns_pktsz,
-			     EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
-      
+	m = add_pseudoheader_ede(header,  m,  ((unsigned char *) header) + udp_size, daemon->edns_pktsz,
+				 EDE_BLOCKED, do_bit, 0);
+
       if (m >= 1)
 	{
 #ifdef HAVE_DUMPFILE
@@ -1781,7 +1785,7 @@ void receive_query(struct listener *listen, time_t now)
 #ifdef HAVE_AUTH
   else if (auth_dns)
     {
-      m = answer_auth(header, ((char *) header) + udp_size, (size_t)n, now, &source_addr, 
+      m = answer_auth(header, ((char *) header) + udp_size, (size_t)n, now, &source_addr,
 		      local_auth, do_bit, have_pseudoheader);
       if (m >= 1)
 	{
@@ -1814,7 +1818,7 @@ void receive_query(struct listener *listen, time_t now)
       if (header->hb4 & HB4_AD)
 	ad_reqd = 1;
 
-      m = answer_request(header, ((char *) header) + udp_size, (size_t)n, 
+      m = answer_request(header, ((char *) header) + udp_size, (size_t)n,
 			 dst_addr_4, netmask, now, ad_reqd, do_bit, have_pseudoheader, &stale, &filtered);
       
       if (m >= 1)
@@ -1829,12 +1833,8 @@ void receive_query(struct listener *listen, time_t now)
 		ede = EDE_STALE;
 
 	      if (ede != EDE_UNSET)
-		{
-		  u16 swap = htons(ede);
-		  
-		  m = add_pseudoheader(header,  m,  ((unsigned char *) header) + udp_size, daemon->edns_pktsz,
-				       EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
-		}
+		m = add_pseudoheader_ede(header,  m,  ((unsigned char *) header) + udp_size, daemon->edns_pktsz,
+				     ede, do_bit, 0);
 	    }
 	  
 #ifdef HAVE_DUMPFILE
@@ -1876,6 +1876,14 @@ void receive_query(struct listener *listen, time_t now)
     }
 }
 
+static int read_tcp(int tcpfd, unsigned char *payload, size_t *rsize)
+{
+  unsigned char c1, c2;
+  return (read_write(tcpfd, &c1, 1, 1) &&
+	  read_write(tcpfd, &c2, 1, 1) &&
+	  read_write(tcpfd, payload, (*rsize = (c1 << 8) | c2), 1));
+}
+
 /* Send query in packet, qsize to a server determined by first,last,start and
    get the reply. return reply size. */
 static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  size_t qsize,
@@ -1885,9 +1893,8 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
   u16 *length = (u16 *)packet;
   unsigned char *payload = &packet[2];
   struct dns_header *header = (struct dns_header *)payload;
-  unsigned char c1, c2;
   unsigned char hash[HASH_SIZE], *hashp;
-  unsigned int rsize;
+  size_t rsize;
   
   (void)mark;
   (void)have_mark;
@@ -1963,9 +1970,7 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	}
       
       if ((!data_sent && !read_write(serv->tcpfd, packet, qsize + sizeof(u16), 0)) ||
-	  !read_write(serv->tcpfd, &c1, 1, 1) ||
-	  !read_write(serv->tcpfd, &c2, 1, 1) ||
-	  !read_write(serv->tcpfd, payload, (rsize = (c1 << 8) | c2), 1))
+	  !read_tcp(serv->tcpfd, payload, &rsize))
 	{
 	  close(serv->tcpfd);
 	  serv->tcpfd = -1;
@@ -2069,7 +2074,6 @@ static int tcp_key_recurse(time_t now, int status, struct dns_header *header, si
 }
 #endif
 
-
 /* The daemon forks before calling this: it should deal with one connection,
    blocking as necessary, and then return. Note, need to be a bit careful
    about resources for debug mode, when the fork is suppressed: that's
@@ -2094,9 +2098,9 @@ unsigned char *tcp_request(int confd, time_t now,
   /* Max TCP packet + slop + size */
   unsigned char *packet = whine_malloc(65536 + MAXDNAME + RRFIXEDSZ + sizeof(u16));
   unsigned char *payload = &packet[2];
-  unsigned char c1, c2;
   /* largest field in header is 16-bits, so this is still sufficiently aligned */
   struct dns_header *header = (struct dns_header *)payload;
+  unsigned char *hlimit = payload + 65536;
   u16 *length = (u16 *)packet;
   struct server *serv;
   struct in_addr dst_addr_4;
@@ -2128,35 +2132,8 @@ unsigned char *tcp_request(int confd, time_t now,
 #endif	
 
   /* We can be configured to only accept queries from at-most-one-hop-away addresses. */
-  if (option_bool(OPT_LOCAL_SERVICE))
-    {
-      struct addrlist *addr;
-
-      if (peer_addr.sa.sa_family == AF_INET6) 
-	{
-	  for (addr = daemon->interface_addrs; addr; addr = addr->next)
-	    if ((addr->flags & ADDRLIST_IPV6) &&
-		is_same_net6(&addr->addr.addr6, &peer_addr.in6.sin6_addr, addr->prefixlen))
-	      break;
-	}
-      else
-	{
-	  struct in_addr netmask;
-	  for (addr = daemon->interface_addrs; addr; addr = addr->next)
-	    {
-	      netmask.s_addr = htonl(~(in_addr_t)0 << (32 - addr->prefixlen));
-	      if (!(addr->flags & ADDRLIST_IPV6) && 
-		  is_same_net(addr->addr.addr4, peer_addr.in.sin_addr, netmask))
-		break;
-	    }
-	}
-      if (!addr)
-	{
-	  prettyprint_addr(&peer_addr, daemon->addrbuff);
-	  my_syslog(LOG_WARNING, _("ignoring query from non-local network %s"), daemon->addrbuff);
-	  return packet;
-	}
-    }
+  if (option_bool(OPT_LOCAL_SERVICE) && !is_local_network_address(&peer_addr))
+    return packet;
 
   while (1)
     {
@@ -2177,9 +2154,7 @@ unsigned char *tcp_request(int confd, time_t now,
 	  if (query_count == TCP_MAX_QUERIES)
 	    return packet;
 
-	  if (!read_write(confd, &c1, 1, 1) || !read_write(confd, &c2, 1, 1) ||
-	      !(size = c1 << 8 | c2) ||
-	      !read_write(confd, payload, size, 1))
+	  if (!read_tcp(confd, payload, &size) || size == 0)
 	    return packet;
 	}
       
@@ -2203,10 +2178,6 @@ unsigned char *tcp_request(int confd, time_t now,
        
       if ((gotname = extract_request(header, (unsigned int)size, daemon->namebuff, &qtype)))
 	{
-#ifdef HAVE_AUTH
-	  struct auth_zone *zone;
-#endif
-
 #ifdef HAVE_CONNTRACK
 	  is_single_query = 1;
 #endif
@@ -2217,15 +2188,8 @@ unsigned char *tcp_request(int confd, time_t now,
 				   &peer_addr, auth_dns ? "auth" : "query", qtype);
 	      
 #ifdef HAVE_AUTH
-	      /* find queries for zones we're authoritative for, and answer them directly */
-	      if (!auth_dns && !option_bool(OPT_LOCALISE))
-		for (zone = daemon->auth_zones; zone; zone = zone->next)
-		  if (in_zone(zone, daemon->namebuff, NULL))
-		    {
-		      auth_dns = 1;
-		      local_auth = 1;
-		      break;
-		    }
+	      if (!auth_dns && is_auth_zone(daemon->namebuff))
+		auth_dns = local_auth = 1;
 #endif
 	    }
 	}
@@ -2263,18 +2227,15 @@ unsigned char *tcp_request(int confd, time_t now,
 #ifdef HAVE_CONNTRACK
       else if (!allowed)
 	{
-	  u16 swap = htons(EDE_BLOCKED);
-
 	  m = answer_disallowed(header, size, (u32)mark, is_single_query ? daemon->namebuff : NULL);
 	  
 	  if (have_pseudoheader && m != 0)
-	    m = add_pseudoheader(header,  m, ((unsigned char *) header) + 65536, daemon->edns_pktsz,
-				 EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
+	    m = add_pseudoheader_ede(header,  m, hlimit, daemon->edns_pktsz, EDE_BLOCKED, do_bit, 0);
 	}
 #endif
 #ifdef HAVE_AUTH
       else if (auth_dns)
-	m = answer_auth(header, ((char *) header) + 65536, (size_t)size, now, &peer_addr, 
+	m = answer_auth(header, (char *) hlimit, (size_t)size, now, &peer_addr, 
 			local_auth, do_bit, have_pseudoheader);
 #endif
       else
@@ -2298,7 +2259,7 @@ unsigned char *tcp_request(int confd, time_t now,
 		 }
 	       
 	       /* m > 0 if answered from cache */
-	       m = answer_request(header, ((char *) header) + 65536, (size_t)size, 
+	       m = answer_request(header, (char *) hlimit, (size_t)size, 
 				  dst_addr_4, netmask, now, ad_reqd, do_bit, have_pseudoheader, &stale, &filtered);
 	     }
 	  /* Do this by steam now we're not in the select() loop */
@@ -2335,12 +2296,12 @@ unsigned char *tcp_request(int confd, time_t now,
 		  else
 		    start = master->last_server;
 		  
-		  size = add_edns0_config(header, size, ((unsigned char *) header) + 65536, &peer_addr, now, &cacheable);
+		  size = add_edns0_config(header, size, hlimit, &peer_addr, now, &cacheable);
 		  
 #ifdef HAVE_DNSSEC
 		  if (option_bool(OPT_DNSSEC_VALID) && (master->flags & SERV_DO_DNSSEC))
 		    {
-		      size = add_do_bit(header, size, ((unsigned char *) header) + 65536);
+		      size = add_do_bit(header, size, hlimit);
 		      
 		      /* For debugging, set Checking Disabled, otherwise, have the upstream check too,
 			 this allows it to select auth servers when one is returning bad data. */
@@ -2425,17 +2386,15 @@ unsigned char *tcp_request(int confd, time_t now,
       if (m == 0)
 	{
 	  if (!(m = make_local_answer(flags, gotname, size, header, daemon->namebuff,
-				      ((char *) header) + 65536, first, last, ede)))
+				      (char *) hlimit, first, last, ede)))
 	    break;
 	  
 	  if (have_pseudoheader)
 	    {
-	      u16 swap = htons((u16)ede);
-	      
 	      if (ede != EDE_UNSET)
-		m = add_pseudoheader(header, m, ((unsigned char *) header) + 65536, daemon->edns_pktsz, EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
+		m = add_pseudoheader_ede(header, m, hlimit, daemon->edns_pktsz, ede, do_bit, 0);
 	      else
-		m = add_pseudoheader(header, m, ((unsigned char *) header) + 65536, daemon->edns_pktsz, 0, NULL, 0, do_bit, 0);
+		m = add_pseudoheader(header, m, hlimit, daemon->edns_pktsz, 0, NULL, 0, do_bit, 0);
 	    }
 	}
       else if (have_pseudoheader)
@@ -2448,11 +2407,7 @@ unsigned char *tcp_request(int confd, time_t now,
 	    ede = EDE_STALE;
 	  
 	  if (ede != EDE_UNSET)
-	    {
-	      u16 swap = htons((u16)ede);
-	      
-	      m = add_pseudoheader(header, m, ((unsigned char *) header) + 65536, daemon->edns_pktsz, EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, do_bit, 0);
-	    }
+	    m = add_pseudoheader_ede(header, m, hlimit, daemon->edns_pktsz, ede, do_bit, 0);
 	}
 	  
       check_log_writer(1);

@@ -243,6 +243,15 @@ size_t add_pseudoheader(struct dns_header *header, size_t plen, unsigned char *l
   return p - (unsigned char *)header;
 }
 
+size_t add_pseudoheader_ede(struct dns_header *header, size_t plen, unsigned char *limit,
+			unsigned short udp_sz, int ede, int set_do, int replace)
+{
+  u16 swap = htons((u16)ede);
+
+  return add_pseudoheader(header, plen, limit, udp_sz,
+		  EDNS0_OPTION_EDE, (unsigned char *)&swap, 2, set_do, replace);
+}
+
 size_t add_do_bit(struct dns_header *header, size_t plen, unsigned char *limit)
 {
   return add_pseudoheader(header, plen, (unsigned char *)limit, PACKETSZ, 0, NULL, 0, 1, 0);
