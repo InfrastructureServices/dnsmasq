@@ -1521,6 +1521,7 @@ void resend_query(void);
 int allocate_rfd(struct randfd_list **fdlp, struct server *serv);
 void free_rfds(struct randfd_list **fdlp);
 int fast_retry(time_t now);
+int recv_server_on_parent(int pipe_on_parent);
 
 /* network.c */
 int indextoname(int fd, int index, char *name);

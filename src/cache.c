@@ -864,6 +864,9 @@ int cache_recv_insert(time_t now, int fd)
 	  cache_end_insert();
 	  return 1;
 	}
+      else if (m == -2)
+	/* receive changed last_server from tcp children. */
+	return recv_server_on_parent(fd);
 
       if (!read_write(fd, (unsigned char *)daemon->namebuff, m, 1) ||
 	  !read_write(fd, (unsigned char *)&ttd, sizeof(ttd), 1) ||

@@ -1887,7 +1887,7 @@ static int read_tcp(int tcpfd, unsigned char *payload, size_t *rsize)
 /* Send query in packet, qsize to a server determined by first,last,start and
    get the reply. return reply size. */
 static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  size_t qsize,
-			int have_mark, unsigned int mark, struct server **servp)
+			int have_mark, unsigned int mark, struct server **servp, int *send_failed)
 {
   int firstsendto = -1;
   u16 *length = (u16 *)packet;
@@ -1899,6 +1899,8 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
   (void)mark;
   (void)have_mark;
 
+  if (send_failed)
+    *send_failed = 0;
   if (!(hashp = hash_questions(header, (unsigned int)qsize, daemon->namebuff)))
     return 0;
 
@@ -1962,6 +1964,8 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	    {
 	      close(serv->tcpfd);
 	      serv->tcpfd = -1;
+	      if (send_failed)
+		(*send_failed)++;
 	      continue;
 	    }
 	  
@@ -1974,6 +1978,8 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	{
 	  close(serv->tcpfd);
 	  serv->tcpfd = -1;
+	  if (send_failed)
+	    (*send_failed)++;
 	  /* We get data then EOF, reopen connection to same server,
 	     else try next. This avoids DoS from a server which accepts
 	     connections and then closes them. */
@@ -2047,7 +2053,7 @@ static int tcp_key_recurse(time_t now, int status, struct dns_header *header, si
 				STAT_ISEQUAL(new_status, STAT_NEED_KEY) ? T_DNSKEY : T_DS, server->edns_pktsz);
       
       if ((start = dnssec_server(server, daemon->keyname, &first, &last)) == -1 ||
-	  (m = tcp_talk(first, last, start, packet, m, have_mark, mark, &server)) == 0)
+	  (m = tcp_talk(first, last, start, packet, m, have_mark, mark, &server, NULL)) == 0)
 	{
 	  new_status = STAT_ABANDONED;
 	  break;
@@ -2073,6 +2079,98 @@ static int tcp_key_recurse(time_t now, int status, struct dns_header *header, si
   return new_status;
 }
 #endif
+
+/* Inspired by cache_end_insert in cache.c
+ * Serializes server information over pipe_to_parent required to switch current one.
+ * Sends always just one record. */
+static int send_server_to_parent(int pipe_to_parent, struct server *serv)
+{
+  ssize_t domainlen = serv->domain_len;
+  ssize_t m = -2;
+  size_t addrlen = sa_len(&serv->addr);
+
+  /* define this is a server feedback, not cache. */
+  if (!read_write(pipe_to_parent, (unsigned char *)&m, sizeof(m), 0) ||
+      !read_write(pipe_to_parent, (unsigned char *)&domainlen, sizeof(domainlen), 0))
+    return 0;
+  if (domainlen > 0 &&
+      !read_write(pipe_to_parent, (unsigned char *)serv->domain, domainlen, 0))
+    return 0;
+  if (!read_write(pipe_to_parent, (unsigned  char *)&serv->arrayposn, sizeof(serv->arrayposn), 0) ||
+      !read_write(pipe_to_parent, (unsigned char *)&addrlen, sizeof(addrlen), 0) ||
+      !read_write(pipe_to_parent, (unsigned char *)&serv->addr.sa, addrlen, 0))
+    return 0;
+  return 1;
+}
+
+/* limited server comparison, compares just domain and address. */
+static int server_addr_equal(struct server *s1, struct server *s2)
+{
+  return (s1->domain_len == s2->domain_len &&
+	 (s1->domain_len == 0 || strcmp(s1->domain, s2->domain) == 0) &&
+	 (s2->flags & (SERV_USE_RESOLV | SERV_LITERAL_ADDRESS)) == 0 &&
+	 sockaddr_isequal(&s1->addr, &s2->addr));
+}
+
+static struct server * server_next(struct server *s, int first, int last, int start)
+{
+  int i = s->arrayposn;
+  if (i == start || first == -1)
+    return NULL;
+  if (i >= last)
+    return daemon->serverarray[first];
+  return daemon->serverarray[i+1];
+}
+
+static int recv_one_server(int pipe_on_parent, struct server *s)
+{
+  ssize_t domainlen;
+  size_t addrlen;
+
+  if (!read_write(pipe_on_parent, (unsigned char *)&domainlen, sizeof(domainlen), 1) ||
+      domainlen < 0 || domainlen > MAXDNAME-1)
+    return 0;
+  if (domainlen > 0 &&
+      !read_write(pipe_on_parent, (unsigned char *)daemon->namebuff, domainlen, 1))
+    return 0;
+  daemon->namebuff[domainlen] = 0;
+  if (!read_write(pipe_on_parent, (unsigned char *)&s->arrayposn, sizeof(s->arrayposn), 1) ||
+      !read_write(pipe_on_parent, (unsigned char *)&addrlen, sizeof(addrlen), 1) ||
+      addrlen > sizeof(s->addr))
+    return 0;
+  
+  if (addrlen > 0 &&
+      !read_write(pipe_on_parent, (unsigned char *)&s->addr, addrlen, 1))
+    return 0;
+  s->domain_len = domainlen;
+  s->domain = daemon->namebuff;
+  return 1;
+}
+
+/* receive new TCP last_server from child. */
+int recv_server_on_parent(int pipe_on_parent)
+{
+  /* -2 were already read. */
+  int current = -1, first = -1, last = -1;
+  struct server *s = NULL;
+  struct server curs = {};
+
+  if (!recv_one_server(pipe_on_parent, &curs) ||
+      !lookup_domain(daemon->namebuff, F_SERVER, &first, &last))
+    return 0;
+
+  current = curs.arrayposn;
+  if (!(current >= first && current < daemon->serverarraysz && daemon->serverarray[current]))
+    current = first;
+
+  for (s = daemon->serverarray[current]; s; s = server_next(s, first, last, current))
+    if (server_addr_equal(&curs, s))
+      {
+	daemon->serverarray[first]->last_server = current;
+	return 1;
+      }
+  return 0;
+}
 
 /* The daemon forks before calling this: it should deal with one connection,
    blocking as necessary, and then return. Note, need to be a bit careful
@@ -2102,7 +2200,7 @@ unsigned char *tcp_request(int confd, time_t now,
   struct dns_header *header = (struct dns_header *)payload;
   unsigned char *hlimit = payload + 65536;
   u16 *length = (u16 *)packet;
-  struct server *serv;
+  struct server *serv = NULL;
   struct in_addr dst_addr_4;
   union mysockaddr peer_addr;
   socklen_t peer_len = sizeof(union mysockaddr);
@@ -2137,7 +2235,7 @@ unsigned char *tcp_request(int confd, time_t now,
 
   while (1)
     {
-      int ede = EDE_UNSET;
+      int ede = EDE_UNSET, send_failed = 0;
 
       if (do_stale)
 	{
@@ -2268,7 +2366,6 @@ unsigned char *tcp_request(int confd, time_t now,
 	  if (m == 0)
 	    {
 	      struct server *master;
-	      int start;
 
 	      if (lookup_domain(daemon->namebuff, gotname, &first, &last))
 		flags = is_local_answer(now, first, daemon->namebuff);
@@ -2289,6 +2386,8 @@ unsigned char *tcp_request(int confd, time_t now,
 		
 	      if (!flags && ede != EDE_NOT_READY)
 		{
+		  int start;
+
 		  master = daemon->serverarray[first];
 		  
 		  if (option_bool(OPT_ORDER) || master->last_server == -1)
@@ -2314,9 +2413,15 @@ unsigned char *tcp_request(int confd, time_t now,
 		     strip it from the reply. */
 		  if (!have_pseudoheader && find_pseudoheader(header, size, NULL, NULL, NULL, NULL))
 		    added_pheader = 1;
-		  
+
 		  /* Loop round available servers until we succeed in connecting to one. */
-		  if ((m = tcp_talk(first, last, start, packet, size, have_mark, mark, &serv)) == 0)
+		  m = tcp_talk(first, last, start, packet, size, have_mark, mark, &serv, &send_failed);
+		  if (serv != NULL && serv->arrayposn != start && daemon->pipe_to_parent != -1)
+		    {
+			    /* used server has changed, forward that information to master process. */
+			    send_server_to_parent(daemon->pipe_to_parent, serv);
+		    }
+		  if (m == 0)
 		    {
 		      ede = EDE_NETERR;
 		      break;
