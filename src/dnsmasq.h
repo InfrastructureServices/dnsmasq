@@ -591,7 +591,8 @@ struct server {
   char *domain;
   struct server *next;
   int serial, arrayposn;
-  int last_server;
+  int last_udp_server;
+  int last_tcp_server;
   union mysockaddr addr, source_addr;
   char interface[IF_NAMESIZE+1];
   unsigned int ifindex; /* corresponding to interface, above */

@@ -352,14 +352,14 @@ static int forward_query(int udpfd, union mysockaddr *udpaddr,
 	{
 	  if (master->forwardcount++ > FORWARD_TEST ||
 	      difftime(now, master->forwardtime) > FORWARD_TIME ||
-	      master->last_server == -1)
+	      master->last_udp_server == -1)
 	    {
 	      master->forwardtime = now;
 	      master->forwardcount = 0;
 	      forward->forwardall = 1;
 	    }
 	  else
-	    start = master->last_server;
+	    start = master->last_udp_server;
 	}
     }
   else
@@ -1073,12 +1073,12 @@ static void dnssec_validate(struct frec *forward, struct dns_header *header,
 #endif
 
 /* set or reset last server used. */
-static void set_last_server(struct dns_header *header, int first, int current)
+static void set_last_server(struct dns_header *header, int current, int *last_server)
 {
   if (RCODE(header) != REFUSED)
-    daemon->serverarray[first]->last_server = current;
-  else if (daemon->serverarray[first]->last_server == current)
-    daemon->serverarray[first]->last_server = -1;
+    *last_server = current;
+  else if (*last_server == current)
+    *last_server = -1;
 }
 
 /* sets new last_server */
@@ -1124,7 +1124,7 @@ void reply_query(int fd, time_t now)
 
   server = daemon->serverarray[c];
 
-  set_last_server(header, first, c);
+  set_last_server(header, c, &daemon->serverarray[first]->last_udp_server);
 
   /* If sufficient time has elapsed, try and expand UDP buffer size again. */
   if (difftime(now, server->pktsz_reduced) > UDP_TEST_TIME)
@@ -2001,7 +2001,7 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
       if (!(hashp = hash_questions(header, rsize, daemon->namebuff)) || memcmp(hash, hashp, HASH_SIZE) != 0)
 	continue;
 
-      set_last_server(header, first, start);
+      set_last_server(header, start, &daemon->serverarray[first]->last_tcp_server);
       serv->flags |= SERV_GOT_TCP;
       
       *servp = serv;
@@ -2172,7 +2172,7 @@ int recv_server_on_parent(int pipe_on_parent)
   for (s = daemon->serverarray[current]; s; s = server_next(s, first, last, current))
     if (server_addr_equal(&curs, s))
       {
-	daemon->serverarray[first]->last_server = current;
+	daemon->serverarray[first]->last_tcp_server = current;
 #ifdef TCP_DEBUG
 	log_query_mysockaddr(F_HOSTS, curs.domain, &s->addr, "TCP server for ", 0);
 #endif
@@ -2402,10 +2402,10 @@ unsigned char *tcp_request(int confd, time_t now,
 
 		  master = daemon->serverarray[first];
 		  
-		  if (option_bool(OPT_ORDER) || master->last_server == -1)
+		  if (option_bool(OPT_ORDER) || master->last_tcp_server == -1)
 		    start = first;
 		  else
-		    start = master->last_server;
+		    start = master->last_tcp_server;
 		  
 		  size = add_edns0_config(header, size, hlimit, &peer_addr, now, &cacheable);
 		  

@@ -72,7 +72,8 @@ void build_server_array(void)
       {
 	daemon->serverarray[count] = serv;
 	serv->serial = count;
-	serv->last_server = -1;
+	serv->last_udp_server = -1;
+	serv->last_tcp_server = -1;
 	count++;
       }
   
@@ -468,8 +469,8 @@ int dnssec_server(struct server *server, char *keyname, int *firstp, int *lastp)
   /* No match to server used for original query.
      Use newly looked up set. */
   if (index == last)
-    index =  daemon->serverarray[first]->last_server == -1 ?
-      first : daemon->serverarray[first]->last_server;
+    index =  daemon->serverarray[first]->last_udp_server == -1 ?
+      first : daemon->serverarray[first]->last_udp_server;
 
   if (firstp)
     *firstp = first;
@@ -739,7 +740,8 @@ int add_update_server(int flags,
 	serv->addr = *addr;
       if (source_addr)
 	serv->source_addr = *source_addr;
-      serv->last_server = -1;
+      serv->last_udp_server = -1;
+      serv->last_tcp_server = -1;
     }
     
   serv->flags = flags;
