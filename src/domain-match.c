@@ -739,6 +739,7 @@ int add_update_server(int flags,
 	serv->addr = *addr;
       if (source_addr)
 	serv->source_addr = *source_addr;
+      serv->last_server = -1;
     }
     
   serv->flags = flags;
