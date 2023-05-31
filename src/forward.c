@@ -1072,6 +1072,15 @@ static void dnssec_validate(struct frec *forward, struct dns_header *header,
 }
 #endif
 
+/* set or reset last server used. */
+static void set_last_server(struct dns_header *header, int first, int current)
+{
+  if (RCODE(header) != REFUSED)
+    daemon->serverarray[first]->last_server = current;
+  else if (daemon->serverarray[first]->last_server == current)
+    daemon->serverarray[first]->last_server = -1;
+}
+
 /* sets new last_server */
 void reply_query(int fd, time_t now)
 {
@@ -1115,10 +1124,7 @@ void reply_query(int fd, time_t now)
 
   server = daemon->serverarray[c];
 
-  if (RCODE(header) != REFUSED)
-    daemon->serverarray[first]->last_server = c;
-  else if (daemon->serverarray[first]->last_server == c)
-    daemon->serverarray[first]->last_server = -1;
+  set_last_server(header, first, c);
 
   /* If sufficient time has elapsed, try and expand UDP buffer size again. */
   if (difftime(now, server->pktsz_reduced) > UDP_TEST_TIME)
@@ -1969,7 +1975,6 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	      continue;
 	    }
 	  
-	  daemon->serverarray[first]->last_server = start;
 	  serv->flags &= ~SERV_GOT_TCP;
 	}
       
@@ -1995,7 +2000,8 @@ static ssize_t tcp_talk(int first, int last, int start, unsigned char *packet,  
 	 Try another server, or give up */
       if (!(hashp = hash_questions(header, rsize, daemon->namebuff)) || memcmp(hash, hashp, HASH_SIZE) != 0)
 	continue;
-      
+
+      set_last_server(header, first, start);
       serv->flags |= SERV_GOT_TCP;
       
       *servp = serv;
