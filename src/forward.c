@@ -2167,8 +2167,14 @@ int recv_server_on_parent(int pipe_on_parent)
     if (server_addr_equal(&curs, s))
       {
 	daemon->serverarray[first]->last_server = current;
+#ifdef TCP_DEBUG
+	log_query_mysockaddr(F_HOSTS, curs.domain, &s->addr, "TCP server for ", 0);
+#endif
 	return 1;
       }
+#ifdef TCP_DEBUG
+  log_query_mysockaddr(F_HOSTS, curs.domain, &curs.addr, "TCP server not found for ", 0);
+#endif
   return 0;
 }
 
