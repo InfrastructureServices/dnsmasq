@@ -469,13 +469,9 @@ static DBusMessage* dbus_read_servers_ex(DBusMessage *message, int strings)
 	      }
 	  } while (dbus_message_iter_get_arg_type(&string_iter) == DBUS_TYPE_STRING);
 	}
-      
-      if (sdetails.orig_hostinfo)
-	{
-	  freeaddrinfo(sdetails.orig_hostinfo);
-	  sdetails.orig_hostinfo = NULL;
-	}
-      
+
+      parse_server_reset(&sdetails);
+
       /* jump to next element in outer array */
       dbus_message_iter_next(&array_iter);
     }

@@ -1105,6 +1105,43 @@ int parse_server_next(struct server_details *sdetails)
   return 0;
 }
 
+void parse_server_reset(struct server_details *s)
+{
+  if (s->orig_hostinfo)
+    {
+      freeaddrinfo(s->orig_hostinfo);
+      s->orig_hostinfo = NULL;
+    }
+}
+
+static char *parse_servers(struct server_details *s, char *domain)
+{
+  if (*s->flags & SERV_LITERAL_ADDRESS)
+    {
+      if (!add_update_server(*s->flags, s->addr, s->source_addr, s->interface, domain, NULL))
+	return  _("error");
+    }
+  else
+    {
+      char *string;
+
+      /* Always reset server as valid here, so we can add the same upstream
+	  server address multiple times for each x.y.z.ip6.arpa  */
+      s->valid = 1;
+      while (parse_server_next(s))
+	{
+	  if ((string = parse_server_addr(s)))
+	    return string;
+
+	  if (!add_update_server(*s->flags, s->addr, s->source_addr, s->interface, domain, NULL))
+	    return  _("error");
+	}
+
+      parse_server_reset(s);
+    }
+  return NULL;
+}
+
 static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int size)
 {
   int i, j;
@@ -1164,31 +1201,9 @@ static char *domain_rev4(int from_file, char *server, struct in_addr *addr4, int
       
       sprintf(string, "in-addr.arpa");
 
-      if (flags & SERV_LITERAL_ADDRESS)
-	{
-	  if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-	    return  _("error");
-	}
-      else
-	{
-	  /* Always reset server as valid here, so we can add the same upstream
-	     server address multiple times for each x.y.z.in-addr.arpa  */
-	  sdetails.valid = 1;
-	  while (parse_server_next(&sdetails))
-	    {
-	      if ((string = parse_server_addr(&sdetails)))
-		return string;
-	      
-	      if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-		return  _("error");
-	    }
-
-	  if (sdetails.orig_hostinfo)
-	    {
-	      freeaddrinfo(sdetails.orig_hostinfo);
-	      sdetails.orig_hostinfo = NULL;
-	    }
-	}
+      string = parse_servers(&sdetails, domain);
+      if (string)
+	return string;
     }
   
   return NULL;
@@ -1255,31 +1270,9 @@ static char *domain_rev6(int from_file, char *server, struct in6_addr *addr6, in
       
       sprintf(string, "ip6.arpa");
 
-      if (flags & SERV_LITERAL_ADDRESS)
-	{
-	  if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-	    return  _("error");
-	}
-      else
-	{
-	  /* Always reset server as valid here, so we can add the same upstream
-	     server address multiple times for each x.y.z.ip6.arpa  */
-	  sdetails.valid = 1;
-	  while (parse_server_next(&sdetails))
-	    {
-	      if ((string = parse_server_addr(&sdetails)))
-		return string;
-	      
-	      if (!add_update_server(flags, &serv_addr, &source_addr, interface, domain, NULL))
-		return  _("error");
-	    }
-
-	  if (sdetails.orig_hostinfo)
-	    {
-	      freeaddrinfo(sdetails.orig_hostinfo);
-	      sdetails.orig_hostinfo = NULL;
-	    }
-	}
+      string = parse_servers(&sdetails, domain);
+      if (string)
+	return string;
     }
   
   return NULL;
@@ -3095,12 +3088,7 @@ static int one_opt(int option, char *arg, char *errstr, char *gen_err, int comma
 	      break;
 	  }
 
-	if (sdetails.orig_hostinfo)
-	  {
-	    freeaddrinfo(sdetails.orig_hostinfo);
-	    sdetails.orig_hostinfo = NULL;
-	  }
-	
+	parse_server_reset(&sdetails);
      	break;
       }
 
