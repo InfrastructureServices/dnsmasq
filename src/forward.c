@@ -68,9 +68,10 @@ int send_from(int fd, int nowild, char *packet, size_t len,
       if (to->sa.sa_family == AF_INET)
 	{
 #if defined(HAVE_LINUX_NETWORK)
-	  struct in_pktinfo p;
-	  p.ipi_ifindex = 0;
-	  p.ipi_spec_dst = source->addr4;
+	  struct in_pktinfo p = {
+	    .ipi_ifindex = 0,
+	    .ipi_spec_dst = source->addr4,
+	  };
 	  msg.msg_controllen = CMSG_SPACE(sizeof(struct in_pktinfo));
 	  memcpy(CMSG_DATA(cmptr), &p, sizeof(p));
 	  cmptr->cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
