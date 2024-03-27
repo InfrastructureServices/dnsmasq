@@ -633,7 +633,6 @@ static int make_duid1(int index, unsigned int type, char *mac, size_t maclen, vo
   
   unsigned char *p;
   (void)index;
-  (void)parm;
   time_t newnow = *((time_t *)parm);
   
   if (type >= 256)
@@ -652,7 +651,8 @@ static int make_duid1(int index, unsigned int type, char *mac, size_t maclen, vo
       daemon->duid_len = maclen + 8;
       PUTSHORT(1, p); /* DUID_LLT */
       PUTSHORT(type, p); /* address type */
-      PUTLONG(*((time_t *)parm), p); /* time */
+      /* avoid warnings with 64bit time_t */
+      PUTLONG((newnow & 0xffffu), p); /* time */
     }
   
   memcpy(p, mac, maclen);
