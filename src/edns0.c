@@ -270,6 +270,7 @@ static size_t add_dns_client(struct dns_header *header, size_t plen, unsigned ch
   int replace = 0, maclen = 0;
   unsigned char mac[DHCP_CHADDR_MAX];
   char encode[18]; /* handle 6 byte MACs ONLY */
+  *encode = 0;
 
   if ((option_bool(OPT_MAC_B64) || option_bool(OPT_MAC_HEX)) && (maclen = find_mac(l3, mac, 1, now)) == 6)
     {
