@@ -615,7 +615,7 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
       
     case DHCP6SOLICIT:
       {
-      	int address_assigned = 0;
+	int address_assigned = 0, ia_invalid = 0;
 	/* tags without all prefix-class tags */
 	struct dhcp_netid *solicit_tags;
 	struct dhcp_context *c;
@@ -698,6 +698,8 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
 		    get_context_tag(state, c);
 		    address_assigned = 1;
 		  }
+		else
+		  ia_invalid++;
 	      }
 	    
 	    /* Suggest configured address(es) */
@@ -783,11 +785,26 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
 	    tagif = add_options(state, 0);
 	  }
 	else
-	  { 
+	  {
+	    char *errmsg;
 	    /* no address, return error */
 	    o1 = new_opt6(OPTION6_STATUS_CODE);
-	    put_opt6_short(DHCP6NOADDRS);
-	    put_opt6_string(_("no addresses available"));
+	    if (state->lease_allocate && ia_invalid)
+	      {
+		/* RFC 8415, Section 18.3.2:
+		   If any of the prefixes of the included addresses are not
+		   appropriate for the link to which the client is connected,
+		   the server MUST return the IA to the client with a Status
+		   Code option with the value NotOnLink. */
+		put_opt6_short(DHCP6NOTONLINK);
+		errmsg = _("not on link");
+	      }
+	    else
+	      {
+		put_opt6_short(DHCP6NOADDRS);
+		errmsg = _("no addresses available");
+	      }
+	    put_opt6_string(errmsg);
 	    end_opt6(o1);
 
 	    /* Some clients will ask repeatedly when we're not giving
@@ -796,7 +813,7 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
 	    for (c = state->context; c; c = c->current)
 	      if (!(c->flags & CONTEXT_RA_STATELESS))
 		{
-		  log6_packet(state, state->lease_allocate ? "DHCPREPLY" : "DHCPADVERTISE", NULL, _("no addresses available"));
+		  log6_packet(state, state->lease_allocate ? "DHCPREPLY" : "DHCPADVERTISE", NULL, errmsg);
 		  break;
 		}
 	  }
@@ -832,7 +849,7 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
 		 /* If we get a request with an IA_*A without addresses, treat it exactly like
 		    a SOLICT with rapid commit set. */
 		 save_counter(start);
-		 goto request_no_address; 
+		 goto request_no_address;
 	       }
 
 	    o = build_ia(state, &t1cntr);
@@ -862,11 +879,11 @@ static int dhcp6_no_relay(struct state *state, int msg_type, unsigned char *inbu
 		      }
 		    else if (!check_address(state, &req_addr))
 		      {
-			/* Address leased to another DUID/IAID */
-			o1 = new_opt6(OPTION6_STATUS_CODE);
-			put_opt6_short(DHCP6UNSPEC);
-			put_opt6_string(_("address in use"));
-			end_opt6(o1);
+			/* Address leased to another DUID/IAID.
+			   Find another address for the client, treat it exactly like
+			   a SOLICT with rapid commit set. */
+			save_counter(start);
+			goto request_no_address;
 		      } 
 		    else 
 		      {
