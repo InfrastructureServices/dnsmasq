@@ -17,7 +17,7 @@ ACTOPM  = dnsmasq_make_enum("ACTION")
 OPT     = dnsmasq_make_enum("OPT")
 EVENT   = dnsmasq_make_enum("EVENT")
 TXT_STAT= dnsmasq_make_enum("TXT_STAT")
-T       = dnsmasq_make_flags("T")
+T       = dnsmasq_make_enum("T")
 
 AH      = dnsmasq_make_flags("AH")
 CONFIG  = dnsmasq_make_flags("CONFIG")
