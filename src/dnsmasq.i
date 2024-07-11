@@ -14,6 +14,7 @@ struct daemon { } daemon;
 %include "dns-protocol.h"
 %include "dhcp-protocol.h"
 %include "dhcp6-protocol.h"
+%include "radv-protocol.h"
 %include "metrics.h"
 
 #if 0
