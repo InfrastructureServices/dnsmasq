@@ -64,9 +64,50 @@ static void pxe_misc(struct dhcp_packet *mess, unsigned char *end, unsigned char
 static int prune_vendor_opts(struct dhcp_netid *netid);
 static struct dhcp_opt *pxe_opts(int pxe_arch, struct dhcp_netid *netid, struct in_addr local, time_t now);
 struct dhcp_boot *find_boot(struct dhcp_netid *netid);
-static int pxe_uefi_workaround(int pxe_arch, struct dhcp_netid *netid, struct dhcp_packet *mess, struct in_addr local, time_t now, int pxe);
+static int pxe_uefi_workaround(struct pxe_service *found, struct dhcp_netid *netid, struct dhcp_packet *mess, struct in_addr local, time_t now, int pxe);
 static void apply_delay(u32 xid, time_t recvtime, struct dhcp_netid *netid);
 static int is_pxe_client(struct dhcp_packet *mess, size_t sz, const char **pxe_vendor);
+
+static struct pxe_service *pxe_service_find(int pxe_arch, struct dhcp_netid *netid, struct pxe_service *start, int reqbn)
+{
+  struct pxe_service *service;
+
+  for (service = start; service; service = service->next)
+    if (pxe_arch == service->CSA && (!reqbn || service->basename) && match_netid(service->netid, netid, 1))
+      return service;
+
+  return NULL;
+}
+
+static void set_boot(struct dhcp_packet *mess, unsigned char *end,
+		     unsigned char *req_options, struct dhcp_boot *boot,
+		     time_t now)
+{
+  if (boot->sname)
+    {
+      if (!option_bool(OPT_NO_OVERRIDE) &&
+          req_options &&
+          in_list(req_options, OPTION_SNAME))
+        option_put_string(mess, end, OPTION_SNAME, boot->sname, 1);
+      else
+        safe_strncpy((char *)mess->sname, boot->sname, sizeof(mess->sname));
+    }
+
+  if (boot->file)
+    {
+      if (!option_bool(OPT_NO_OVERRIDE) &&
+          req_options &&
+          in_list(req_options, OPTION_FILENAME))
+        option_put_string(mess, end, OPTION_FILENAME, boot->file, 1);
+      else
+        safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
+    }
+
+  if (boot->next_server.s_addr)
+    mess->siaddr = boot->next_server;
+  else if (boot->tftp_sname)
+    mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
+}
 
 size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 		  size_t sz, time_t now, int unicast_dest, int loopback,
@@ -871,7 +912,7 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	  (opt = option_find(mess, sz, OPTION_VENDOR_CLASS_OPT, 1)) &&
 	  (opt = option_find1(option_ptr(opt, 0), option_ptr(opt, option_len(opt)), SUBOPT_PXE_BOOT_ITEM, 4)))
 	{
-	  struct pxe_service *service;
+	  struct pxe_service *service = daemon->pxe_services;
 	  int type = option_uint(opt, 0, 2);
 	  int layer = option_uint(opt, 2, 2);
 	  unsigned char save71[4];
@@ -887,11 +928,11 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	    }
 
 	  memcpy(save71, option_ptr(opt, 0), 4);
-	  
+
 	  for (service = daemon->pxe_services; service; service = service->next)
 	    if (service->type == type)
 	      break;
-	  
+
 	  for (; context; context = context->current)
 	    if (match_netid(context->filter, tagif_netid, 1) &&
 		is_same_net(mess->ciaddr, context->start, context->netmask))
@@ -936,82 +977,76 @@ size_t dhcp_reply(struct dhcp_context *context, char *iface_name, int int_index,
 	  return dhcp_packet_size(mess, agent_id, real_end);	  
 	}
       
+      /* proxy DHCP here. */
       if ((opt = option_find(mess, sz, OPTION_ARCH, 2)))
-	{
 	  pxearch = option_uint(opt, 0, 2);
 
-	  /* proxy DHCP here. */
-	  if ((mess_type == DHCPDISCOVER || (pxe && mess_type == DHCPREQUEST)))
-	    {
-	      struct dhcp_context *tmp;
-	      int workaround = 0;
-	      
-	      for (tmp = context; tmp; tmp = tmp->current)
-		if ((tmp->flags & CONTEXT_PROXY) &&
-		    match_netid(tmp->filter, tagif_netid, 1))
-		  break;
-	      
-	      if (tmp)
-		{
-		  struct dhcp_boot *boot;
-		  int redirect4011 = 0;
+      if (opt && (mess_type == DHCPDISCOVER || (pxe && mess_type == DHCPREQUEST)))
+	{
+	  struct dhcp_context *tmp;
+	  int workaround = 0;
 
-		  if (tmp->netid.net)
-		    {
-		      tmp->netid.next = netid;
-		      tagif_netid = run_tag_if(&tmp->netid);
-		    }
-		  
-		  boot = find_boot(tagif_netid);
-		  
-		  mess->yiaddr.s_addr = 0;
-		  if  (mess_type == DHCPDISCOVER || mess->ciaddr.s_addr == 0)
-		    {
-		      mess->ciaddr.s_addr = 0;
-		      mess->flags |= htons(0x8000); /* broadcast */
-		    }
-		  
-		  clear_packet(mess, end);
-		  
-		  /* Redirect EFI clients to port 4011 */
-		  if (pxearch >= 6)
-		    {
-		      redirect4011 = 1;
-		      mess->siaddr = tmp->local;
-		    }
-		  
-		  /* Returns true if only one matching service is available. On port 4011, 
-		     it also inserts the boot file and server name. */
-		  workaround = pxe_uefi_workaround(pxearch, tagif_netid, mess, tmp->local, now, pxe);
-		  
-		  if (!workaround && boot)
-		    {
-		      /* Provide the bootfile here, for iPXE, and in case we have no menu items
-			 and set discovery_control = 8 */
-		      if (boot->next_server.s_addr) 
-			mess->siaddr = boot->next_server;
-		      else if (boot->tftp_sname) 
-			mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
-		      
-		      if (boot->file)
-			safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
-		    }
-		  
-		  option_put(mess, end, OPTION_MESSAGE_TYPE, 1, 
-			     mess_type == DHCPDISCOVER ? DHCPOFFER : DHCPACK);
-		  option_put(mess, end, OPTION_SERVER_IDENTIFIER, INADDRSZ, htonl(tmp->local.s_addr));
-		  pxe_misc(mess, end, uuid, pxevendor);
-		  prune_vendor_opts(tagif_netid);
-		  if ((pxe && !workaround) || !redirect4011)
-		    do_encap_opts(pxe_opts(pxearch, tagif_netid, tmp->local, now), OPTION_VENDOR_CLASS_OPT, DHOPT_VENDOR_MATCH, mess, end, 0);
-	    
-		  daemon->metrics[METRIC_PXE]++;
-		  log_packet("PXE", NULL, emac, emac_len, iface_name, ignore ? "proxy-ignored" : "proxy", NULL, mess->xid);
-		  log_tags(tagif_netid, ntohl(mess->xid));
-		  if (!ignore)
-		    apply_delay(mess->xid, recvtime, tagif_netid);
-		  return ignore ? 0 : dhcp_packet_size(mess, agent_id, real_end);	  
+	      
+	  for (tmp = context; tmp; tmp = tmp->current)
+	    if ((tmp->flags & CONTEXT_PROXY) &&
+		match_netid(tmp->filter, tagif_netid, 1))
+	      break;
+	      
+	  if (tmp)
+	    {
+	      struct dhcp_boot *boot;
+	      int redirect4011 = 0;
+	      struct pxe_service *service;
+
+	      if (tmp->netid.net)
+		{
+		  tmp->netid.next = netid;
+		  tagif_netid = run_tag_if(&tmp->netid);
 		}
+
+	      boot = find_boot(tagif_netid);
+
+	      mess->yiaddr.s_addr = 0;
+	      if  (mess_type == DHCPDISCOVER || mess->ciaddr.s_addr == 0)
+		{
+		  mess->ciaddr.s_addr = 0;
+		  mess->flags |= htons(0x8000); /* broadcast */
+		}
+
+	      clear_packet(mess, end);
+
+	      /* Redirect EFI clients to port 4011 */
+	      if (pxearch >= 6)
+		{
+		  redirect4011 = 1;
+		  mess->siaddr = tmp->local;
+		}
+
+	      service = pxe_service_find(pxearch, tagif_netid, daemon->pxe_services, 0);
+	      /* Returns true if only one matching service is available. On port 4011,
+		  it also inserts the boot file and server name. */
+	      if (boot && service &&
+		  !(workaround = pxe_uefi_workaround(service, tagif_netid, mess, tmp->local, now, pxe)))
+		{
+		  /* Provide the bootfile here, for iPXE, and in case we have no menu items
+		      and set discovery_control = 8 */
+		      set_boot(mess, end, req_options, boot, now);
+		}
+
+	      option_put(mess, end, OPTION_MESSAGE_TYPE, 1,
+			  mess_type == DHCPDISCOVER ? DHCPOFFER : DHCPACK);
+	      option_put(mess, end, OPTION_SERVER_IDENTIFIER, INADDRSZ, htonl(tmp->local.s_addr));
+	      pxe_misc(mess, end, uuid, pxevendor);
+	      prune_vendor_opts(tagif_netid);
+	      if ((pxe && !workaround) || !redirect4011)
+		do_encap_opts(pxe_opts(pxearch, tagif_netid, tmp->local, now), OPTION_VENDOR_CLASS_OPT, DHOPT_VENDOR_MATCH, mess, end, 0);
+
+	      daemon->metrics[METRIC_PXE]++;
+	      log_packet("PXE", NULL, emac, emac_len, iface_name, ignore ? "proxy-ignored" : "proxy", NULL, mess->xid);
+	      log_tags(tagif_netid, ntohl(mess->xid));
+	      if (!ignore)
+		apply_delay(mess->xid, recvtime, tagif_netid);
+	      return ignore ? 0 : dhcp_packet_size(mess, agent_id, real_end);
 	    }
 	}
     }
@@ -2160,31 +2195,20 @@ static int prune_vendor_opts(struct dhcp_netid *netid)
   return force;
 }
 
-
 /* Many UEFI PXE implementations have badly broken menu code.
    If there's exactly one relevant menu item, we abandon the menu system,
    and jamb the data direct into the DHCP file, siaddr and sname fields.
    Note that in this case, we have to assume that layer zero would be requested
    by the client PXE stack. */
-static int pxe_uefi_workaround(int pxe_arch, struct dhcp_netid *netid, struct dhcp_packet *mess, struct in_addr local, time_t now, int pxe)
+static int pxe_uefi_workaround(struct pxe_service *found, struct dhcp_netid *netid, struct dhcp_packet *mess, struct in_addr local, time_t now, int pxe)
 {
-  struct pxe_service *service, *found;
-
-  /* Only workaround UEFI archs. */
-  if (pxe_arch < 6)
-    return 0;
-  
-  for (found = NULL, service = daemon->pxe_services; service; service = service->next)
-    if (pxe_arch == service->CSA && service->basename && match_netid(service->netid, netid, 1))
-      {
-	if (found)
-	  return 0; /* More than one relevant menu item */
-	  
-	found = service;
-      }
-
+  found = pxe_service_find(found->CSA, netid, found, 1);
   if (!found)
     return 0; /* No relevant menu items. */
+  else if (found->CSA < 6)
+    return 0; /* Only workaround UEFI archs. */
+  else if (pxe_service_find(found->CSA, netid, found->next, 1))
+    return 0; /* More than one relevant menu item */
   
   if (!pxe)
      return 1;
@@ -2405,6 +2429,7 @@ static void do_options(struct dhcp_context *context,
   int done_vendor_class = 0;
   struct dhcp_netid *tagif;
   struct dhcp_netid_list *id_list;
+  struct pxe_service *pxe_service;
 
   /* filter options based on tags, those we want get DHOPT_TAGOK bit set */
   if (context)
@@ -2449,30 +2474,7 @@ static void do_options(struct dhcp_context *context,
      names, so we always send those.  */
   if ((boot = find_boot(tagif)))
     {
-      if (boot->sname)
-	{	  
-	  if (!option_bool(OPT_NO_OVERRIDE) &&
-	      req_options && 
-	      in_list(req_options, OPTION_SNAME))
-	    option_put_string(mess, end, OPTION_SNAME, boot->sname, 1);
-	  else
-	    safe_strncpy((char *)mess->sname, boot->sname, sizeof(mess->sname));
-	}
-      
-      if (boot->file)
-	{
-	  if (!option_bool(OPT_NO_OVERRIDE) &&
-	      req_options && 
-	      in_list(req_options, OPTION_FILENAME))
-	    option_put_string(mess, end, OPTION_FILENAME, boot->file, 1);
-	  else
-	    safe_strncpy((char *)mess->file, boot->file, sizeof(mess->file));
-	}
-      
-      if (boot->next_server.s_addr) 
-	mess->siaddr = boot->next_server;
-      else if (boot->tftp_sname)
-	mess->siaddr = a_record_from_hosts(boot->tftp_sname, now);
+      set_boot(mess, end, req_options, boot, now);
     }
   else
     /* Use the values of the relevant options if no dhcp-boot given and
@@ -2766,10 +2768,10 @@ static void do_options(struct dhcp_context *context,
 
   force_encap = prune_vendor_opts(tagif);
   
-  if (context && pxe_arch != -1)
+  if (context && pxe_arch != -1 && (pxe_service = pxe_service_find(pxe_arch, tagif, daemon->pxe_services, 0)))
     {
       pxe_misc(mess, end, uuid, pxevendor);
-      if (!pxe_uefi_workaround(pxe_arch, tagif, mess, context->local, now, 0))
+      if (!pxe_uefi_workaround(pxe_service, tagif, mess, context->local, now, 0))
 	config_opts = pxe_opts(pxe_arch, tagif, context->local, now);
     }
 
